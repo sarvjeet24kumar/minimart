@@ -76,9 +76,9 @@ class Item(BaseModel):
         foreign_keys=[deleted_by],
     )
 
-    def __repr__(self) -> str:
-        return f"<Item(id={self.id}, name='{self.name}', status={self.status})>"
-
     @property
     def is_purchased(self) -> bool:
         return self.status == ItemStatus.PURCHASED
+    def __repr__(self) -> str:
+        return f"<Item(id={self.id}, name='{self.name}', status={self.status})>"
+

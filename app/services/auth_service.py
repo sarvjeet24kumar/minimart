@@ -97,10 +97,7 @@ class AuthService:
 
         if not user.is_email_verified:
 
-            await self.send_verification_otp(email, tenant_id, background_tasks)
-            raise EmailNotVerifiedException(
-                "Please verify your email before logging in. A new OTP has been sent."
-            )
+            raise EmailNotVerifiedException("Please verify your email before logging .")
 
         if user.tenant_id:
             result = await self.db.execute(
