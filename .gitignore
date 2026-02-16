@@ -7,4 +7,10 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
+# Local editor settings
+.vscode/
+
+# Celery Beat
+celerybeat-schedule*
+
 .DS_Store
