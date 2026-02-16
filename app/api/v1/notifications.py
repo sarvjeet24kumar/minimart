@@ -81,7 +81,7 @@ async def mark_notification_read(
     return MessageResponse(message="Notification marked as read")
 
 
-@router.post(
+@router.patch(
     "/read-all",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
