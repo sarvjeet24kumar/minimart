@@ -131,6 +131,11 @@ class InvitationActionService(BaseInvitationService):
         if not invite or invite.status != InviteStatus.PENDING:
             return True
 
+        if invite.expires_at < get_now():
+            invite.status = InviteStatus.EXPIRED
+            await self.db.commit()
+            return True
+
         invite.status = InviteStatus.REJECTED
         invite.rejected_at = get_now()
         await self.db.commit()
