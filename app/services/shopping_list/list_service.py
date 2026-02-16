@@ -53,7 +53,7 @@ class ShoppingListService(BaseListService):
         await self.db.commit()
         await self.db.refresh(shopping_list)
 
-        logger.info("Shopping list created: list_id=%s", shopping_list.id)
+        logger.info("Shopping list created")
         return shopping_list
 
     async def get_list(self, list_id: UUID, user: User) -> ShoppingList:
@@ -150,13 +150,12 @@ class ShoppingListService(BaseListService):
         await self.db.commit()
         await self.db.refresh(shopping_list)
 
-        logger.info("Shopping list updated: list_id=%s", list_id)
+        logger.info("Shopping list updated")
 
         await self._publish_event(
             list_id,
             WS_EVENT_LIST_UPDATED,
             {"id": str(shopping_list.id), "name": shopping_list.name},
-            exclude_user_id=user.id,
         )
 
         notification_service = NotificationService(self.db)
@@ -177,13 +176,12 @@ class ShoppingListService(BaseListService):
         shopping_list.deleted_at = func.now()
         await self.db.commit()
 
-        logger.info("Shopping list deleted: list_id=%s", list_id)
+        logger.info("Shopping list deleted")
 
         await self._publish_event(
             list_id,
             WS_EVENT_LIST_DELETED,
             {"id": str(list_id)},
-            exclude_user_id=user.id,
         )
 
         return True

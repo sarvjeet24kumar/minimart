@@ -14,7 +14,12 @@ from app.core.dependencies import PaginationParams, require_role
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
-from app.schemas.tenant import TenantCreate, TenantResponse, TenantUpdate
+from app.schemas.tenant import (
+    TenantCreate,
+    TenantResponse,
+    TenantDetailResponse,
+    TenantUpdate,
+)
 from app.services.tenant_service import TenantService
 
 router = APIRouter()
@@ -39,7 +44,7 @@ async def create_tenant(
 
 @router.get(
     "",
-    response_model=PaginatedResponse[TenantResponse],
+    response_model=PaginatedResponse[TenantDetailResponse],
     status_code=status.HTTP_200_OK,
 )
 async def list_tenants(
@@ -54,7 +59,7 @@ async def list_tenants(
     items, total = await tenant_service.get_all_tenants(
         skip=pagination.skip, limit=pagination.size
     )
-    
+
     return PaginatedResponse(
         data=items,
         total=total,
@@ -66,7 +71,7 @@ async def list_tenants(
 
 @router.get(
     "/{tenant_id}",
-    response_model=TenantResponse,
+    response_model=TenantDetailResponse,
     status_code=status.HTTP_200_OK,
 )
 async def get_tenant(
@@ -83,7 +88,7 @@ async def get_tenant(
 
 @router.patch(
     "/{tenant_id}",
-    response_model=TenantResponse,
+    response_model=TenantDetailResponse,
     status_code=status.HTTP_200_OK,
 )
 async def update_tenant(

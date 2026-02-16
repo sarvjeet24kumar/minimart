@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.common.constants import (
     MAX_LENGTH_EMAIL,
     MAX_LENGTH_NAME,
-    MAX_LENGTH_PASSWORD,
+    MAX_LENGTH_PASSWORD_HASH,
     MAX_LENGTH_USERNAME,
 )
 from app.common.enums import UserRole
@@ -53,7 +53,7 @@ class User(BaseModel):
     email: Mapped[str] = mapped_column(
         String(MAX_LENGTH_EMAIL), nullable=False, index=True
     )
-    password: Mapped[str] = mapped_column(String(MAX_LENGTH_PASSWORD), nullable=False)
+    password: Mapped[str] = mapped_column(String(MAX_LENGTH_PASSWORD_HASH), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         ENUM(UserRole, name="user_role", create_type=True),
         default=UserRole.USER,

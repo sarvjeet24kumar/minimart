@@ -86,17 +86,16 @@ class AuthService:
             )
         user = result.scalar_one_or_none()
 
-        if not user:
-            raise UnauthorizedException("Invalid email or password")
-
-        if not verify_password(password, user.password):
+        if not user or not verify_password(password, user.password):
+            logger.warning("Failed login attempt")
             raise UnauthorizedException("Invalid email or password")
 
         if not user.is_active:
+            logger.warning("Login failed: User account is inactive")
             raise ForbiddenException("User account is inactive")
 
         if not user.is_email_verified:
-
+            logger.warning("Login failed: Email not verified")
             raise EmailNotVerifiedException("Please verify your email before logging .")
 
         if user.tenant_id:
@@ -106,6 +105,7 @@ class AuthService:
             tenant = result.scalar_one_or_none()
 
             if not tenant or not tenant.is_active:
+                logger.warning("Login failed: Tenant is inactive")
                 raise TenantInactiveException()
 
         access_token = create_access_token(
@@ -119,6 +119,7 @@ class AuthService:
             tenant_id=user.tenant_id,
         )
 
+        logger.info("User logged in successfully")
         return LoginResponse(access_token=access_token, refresh_token=refresh_token)
 
     async def send_verification_otp(
@@ -143,6 +144,7 @@ class AuthService:
         user = result.scalar_one_or_none()
 
         if not user:
+            logger.info("Verification OTP requested for non-existent user")
             return
 
         if user.is_email_verified:
@@ -158,9 +160,13 @@ class AuthService:
         await RedisService.store_otp(email, otp, expire_seconds, tenant_id)
 
         if background_tasks:
+            logger.info("Staging verification OTP email background task")
             background_tasks.add_task(EmailService.send_otp_email, email, otp)
         else:
+            logger.info("Sending verification OTP email synchronously")
             await EmailService.send_otp_email(email, otp)
+            
+        logger.info("Verification OTP sent")
 
     async def verify_email(self, email: str, otp: str, tenant_id: UUID) -> bool:
         """
@@ -184,15 +190,18 @@ class AuthService:
         stored_otp = await RedisService.get_otp(email, tenant_id)
 
         if not stored_otp:
+            logger.warning("Email verification failed: OTP expired")
             raise ValidationException("OTP has expired. Please request a new one.")
 
         if not hmac.compare_digest(stored_otp, otp):
+            logger.warning("Email verification failed: Invalid OTP")
             raise ValidationException("Invalid OTP")
 
         user.is_email_verified = True
         user.is_active = True
         await self.db.commit()
 
+        logger.info("Email verified successfully")
         await RedisService.delete_otp(email, tenant_id)
 
         return True
@@ -216,14 +225,17 @@ class AuthService:
             result = await self.db.execute(select(Tenant).where(Tenant.id == tenant_id))
             tenant = result.scalar_one_or_none()
             if not tenant:
+                logger.warning("Signup failed: Tenant not found")
                 raise NotFoundException("Tenant not found")
             if not tenant.is_active:
+                logger.warning("Signup failed: Tenant is inactive")
                 raise TenantInactiveException()
 
         result = await self.db.execute(
             select(User).where(and_(User.email == email, User.tenant_id == tenant_id))
         )
         if result.scalar_one_or_none():
+            logger.info("Signup failed: Email already registered")
             raise ConflictException("Email already registered in this tenant")
 
         result = await self.db.execute(
@@ -232,6 +244,7 @@ class AuthService:
             )
         )
         if result.scalar_one_or_none():
+            logger.info("Signup failed: Username already exists")
             raise ConflictException("Username already exist")
         user = User(
             email=email,
@@ -248,6 +261,7 @@ class AuthService:
         await self.db.commit()
         await self.db.refresh(user)
 
+        logger.info("New user signup successful")
         await self.send_verification_otp(email, tenant_id, background_tasks)
         return True
 
@@ -298,6 +312,8 @@ class AuthService:
                 )
                 self.db.add(blacklisted)
                 await self.db.commit()
+        
+        logger.info("User logged out")
         await manager.disconnect_all_for_user(str(user_id))
 
     async def refresh_tokens(self, refresh_token: str) -> tuple[str, str]:
@@ -312,6 +328,7 @@ class AuthService:
             raise UnauthorizedException("Invalid refresh token")
 
         if payload.get("type") != "refresh":
+            logger.warning("Token refresh failed: Invalid token type")
             raise UnauthorizedException("Invalid token type")
 
         token_id = payload.get("jti")
@@ -319,6 +336,7 @@ class AuthService:
             select(BlacklistedToken).where(BlacklistedToken.token_id == token_id)
         )
         if result.scalar_one_or_none():
+            logger.warning("Token refresh failed: Token revoked")
             raise UnauthorizedException("Token has been revoked")
 
         user_id = payload.get("sub")
@@ -326,6 +344,7 @@ class AuthService:
         user = result.scalar_one_or_none()
 
         if not user or not user.is_active:
+            logger.warning("Token refresh failed: User not found or inactive")
             raise UnauthorizedException("User not found or inactive")
 
         access_token = create_access_token(
@@ -381,21 +400,26 @@ class AuthService:
         )
         user = result.scalar_one_or_none()
         if not user:
+            logger.info("Password reset requested for non-existent user")
             return
 
         token = create_password_reset_token(user.id, user.tenant_id)
         payload = decode_token(token)
         jti = payload.get("jti")
 
-        await RedisService.store_password_reset_jti(jti, str(user.id), 900)
+        await RedisService.store_password_reset_jti(str(user.id), jti, 900)
         reset_url = f"{settings.INVITATION_BASE_URL.rsplit('/', 1)[0]}/reset-password?token={token}"
 
         if background_tasks:
+            logger.info("Staging password reset email background task")
             background_tasks.add_task(
                 EmailService.send_password_reset_email, user.email, reset_url
             )
         else:
+            logger.info("Sending password reset email synchronously")
             await EmailService.send_password_reset_email(user.email, reset_url)
+            
+        logger.info("Password reset link sent")
 
     async def reset_password(
         self, token: str, new_password: str, confirm_password: str
@@ -424,12 +448,12 @@ class AuthService:
         jti = payload.get("jti")
         user_id = payload.get("sub")
 
-        stored_user_id = await RedisService.validate_password_reset_jti(jti)
-        if not stored_user_id:
+        stored_jti = await RedisService.get_password_reset_jti(user_id)
+        if not stored_jti or stored_jti != jti:
             raise MiniMartException(
                 status_code=400,
                 code="INVALID_RESET_TOKEN",
-                message="Password reset token has already been used or has expired.",
+                message="Password reset link is invalid or has expired.",
             )
 
         result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
@@ -441,6 +465,7 @@ class AuthService:
         user.password = hash_password(new_password)
         await self.db.commit()
 
-        await RedisService.delete_password_reset_jti(jti)
+        logger.info("Password reset successful")
+        await RedisService.delete_password_reset_jti(user_id)
 
         return True

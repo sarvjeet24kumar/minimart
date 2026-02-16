@@ -44,9 +44,7 @@ async def accept_invitation(
     Accept a shopping list invitation.
     """
     action_service = InvitationActionService(db)
-    await action_service.accept_invitation(
-        data.token, current_user
-    )
+    await action_service.accept_invitation(data.token, current_user)
     return MessageResponse(message="Invitation accepted")
 
 
@@ -57,20 +55,20 @@ async def accept_invitation(
 )
 async def reject_invitation(
     data: InvitationRejectRequest,
+    current_user: Annotated[User, Depends(get_current_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Reject a shopping list invitation.
     """
     action_service = InvitationActionService(db)
-    await action_service.reject_invitation(data.token)
+    await action_service.reject_invitation(data.token, current_user)
     return MessageResponse(message="Invitation rejected")
 
 
 @router.delete(
     "/{invite_id}",
-    response_model=MessageResponse,
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_204_NO_CONTENT,
 )
 async def cancel_invitation(
     invite_id: UUID,
@@ -82,7 +80,6 @@ async def cancel_invitation(
     """
     management_service = InvitationManagementService(db)
     await management_service.cancel_invitation(invite_id, current_user)
-    return MessageResponse(message="Invitation cancelled")
 
 
 @router.post(
@@ -109,6 +106,7 @@ async def resend_invitation(
         expires_at=expires_at,
     )
 
+
 @list_router.get(
     "/invites",
     response_model=PaginatedResponse[InvitationResponse],
@@ -119,8 +117,9 @@ async def get_my_invites(
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
     status_filter: str | None = Query(
-        None, alias="status",
-        description="Filter by status: PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED"
+        None,
+        alias="status",
+        description="Filter by status: PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED",
     ),
 ):
     """
@@ -178,8 +177,9 @@ async def get_list_invites(
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
     status_filter: str | None = Query(
-        None, alias="status",
-        description="Filter by status: PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED"
+        None,
+        alias="status",
+        description="Filter by status: PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED",
     ),
 ):
     """

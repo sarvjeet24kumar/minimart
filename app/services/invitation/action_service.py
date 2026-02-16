@@ -8,6 +8,7 @@ from jose import JWTError
 from sqlalchemy import and_, select
 
 from app.common.enums import InviteStatus, MemberRole, NotificationType
+from app.core.logging import get_logger
 from app.core.security import decode_invitation_token
 from app.core.time import get_now
 from app.exceptions import (
@@ -25,20 +26,27 @@ from app.services.invitation.base import BaseInvitationService
 from app.services.notification_service import NotificationService
 
 
+logger = get_logger(__name__)
+
+
 class InvitationActionService(BaseInvitationService):
     """Handles accepting and rejecting invitations."""
 
     async def accept_invitation(self, token: str, user: User) -> ShoppingList:
         """Accept an invitation."""
+        self._block_super_admin(user)
         try:
             payload = decode_invitation_token(token)
         except JWTError as e:
+            logger.warning("Invalid or expired invitation token")
             raise ValidationException(f"Invalid or expired invitation token: {str(e)}") from e
 
         if payload["email"] != user.email:
+            logger.warning("Invitation email mismatch")
             raise ForbiddenException("Invalid Token")
 
         if UUID(payload["tenant_id"]) != user.tenant_id:
+            logger.warning("Cross-tenant invitation accept attempt denied")
             raise ForbiddenException("Cross-tenant invitation not allowed")
 
         result = await self.db.execute(
@@ -47,9 +55,11 @@ class InvitationActionService(BaseInvitationService):
         invite = result.scalar_one_or_none()
 
         if not invite:
+            logger.warning("Invitation record not found")
             raise ValidationException("Invitation not found")
 
         if invite.status != InviteStatus.PENDING:
+            logger.warning("Attempted to accept non-pending invitation")
             raise MiniMartException(
                 status_code=400,
                 code="INVITE_NOT_PENDING",
@@ -57,6 +67,7 @@ class InvitationActionService(BaseInvitationService):
             )
 
         if invite.expires_at < get_now():
+            logger.info("Invitation has expired")
             invite.status = InviteStatus.EXPIRED
             await self.db.commit()
             raise ValidationException("Invitation has expired")
@@ -69,6 +80,7 @@ class InvitationActionService(BaseInvitationService):
         shopping_list = result.scalar_one_or_none()
 
         if not shopping_list:
+            logger.warning("Shopping list not found for invitation acceptance")
             raise NotFoundException("Shopping list no longer exists")
 
         result = await self.db.execute(
@@ -95,6 +107,8 @@ class InvitationActionService(BaseInvitationService):
         invite.status = InviteStatus.ACCEPTED
         invite.accepted_at = get_now()
         await self.db.commit()
+        
+        logger.info("Invitation accepted successfully")
 
         await self._broadcast(list_id, "member_joined", {
             "user_id": str(user.id),
@@ -116,11 +130,13 @@ class InvitationActionService(BaseInvitationService):
         await self.db.refresh(shopping_list)
         return shopping_list
 
-    async def reject_invitation(self, token: str) -> bool:
+    async def reject_invitation(self, token: str, user: User) -> bool:
         """Reject an invitation."""
+        self._block_super_admin(user)
         try:
             decode_invitation_token(token)
         except JWTError:
+            logger.warning("Invalid token for invitation rejection")
             return True
 
         result = await self.db.execute(
@@ -129,9 +145,11 @@ class InvitationActionService(BaseInvitationService):
         invite = result.scalar_one_or_none()
 
         if not invite or invite.status != InviteStatus.PENDING:
+            logger.info("Invitation not found or not pending for rejection")
             return True
 
         if invite.expires_at < get_now():
+            logger.info("Invitation has expired (reject attempt)")
             invite.status = InviteStatus.EXPIRED
             await self.db.commit()
             return True
@@ -139,6 +157,8 @@ class InvitationActionService(BaseInvitationService):
         invite.status = InviteStatus.REJECTED
         invite.rejected_at = get_now()
         await self.db.commit()
+        
+        logger.info("Invitation rejected")
 
         await self._broadcast(invite.shopping_list_id, "invite_rejected", {
             "invite_id": str(invite.id),

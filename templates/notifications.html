@@ -90,7 +90,8 @@
             const token = document.getElementById('token').value;
             if (!token) return alert("Please paste a token");
 
-            const url = `ws://localhost:8000/ws?token=${token}`;
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${wsProtocol}//${window.location.host}/ws?token=${token}`;
             ws = new WebSocket(url);
             logToUI('Attempting to connect...', 'gray');
 

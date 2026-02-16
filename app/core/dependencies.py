@@ -21,7 +21,10 @@ from app.exceptions import (
     UnauthorizedException,
 )
 from app.exceptions.base import MiniMartException
+from app.core.logging import get_logger
 from app.models.shopping_list import ShoppingList
+
+logger = get_logger(__name__)
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -122,6 +125,7 @@ def require_role(*allowed_roles: UserRole):
         current_user: Annotated[User, Depends(get_current_verified_user)],
     ) -> User:
         if current_user.role not in allowed_roles:
+            logger.warning(f"Unauthorized access attempt: Required roles { [r.value for r in allowed_roles] }")
             raise ForbiddenException(
                 f"This action requires one of these roles: {[r.value for r in allowed_roles]}"
             )

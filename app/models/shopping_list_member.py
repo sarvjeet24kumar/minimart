@@ -64,7 +64,12 @@ class ShoppingListMember(BaseModel):
     user: Mapped["User"] = relationship("User", back_populates="list_memberships")
 
     def __repr__(self) -> str:
-        return f"<ShoppingListMember(list_id={self.shopping_list_id}, user_id={self.user_id}, role={self.role})>"
+        # Use __dict__ to avoid triggering lazy loads/refresh if detached during error reporting
+        d = self.__dict__
+        list_id = d.get("shopping_list_id", "???")
+        user_id = d.get("user_id", "???")
+        role = d.get("role", "???")
+        return f"<ShoppingListMember(list_id={list_id}, user_id={user_id}, role={role})>"
 
     @property
     def username(self) -> str:

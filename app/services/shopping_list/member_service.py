@@ -88,13 +88,12 @@ class ListMemberService(BaseListService):
         await self.db.delete(membership)
         await self.db.commit()
 
-        logger.info("Member removed from list: list_id=%s", list_id)
+        logger.info("Member removed from list")
 
         await self._publish_event(
             list_id,
             WS_EVENT_MEMBER_REMOVED,
             {"user_id": str(member_user_id)},
-            exclude_user_id=user.id,
         )
 
         await self.notify_member_removed(list_id, member_user_id, user, shopping_list.name)
@@ -122,9 +121,9 @@ class ListMemberService(BaseListService):
             await self.db.delete(membership)
             await self.db.commit()
 
-            logger.info("Member left list: list_id=%s", list_id)
+            logger.info("User left list")
 
-            await self._publish_event(list_id, WS_EVENT_MEMBER_LEFT, {"user_id": str(user.id)}, exclude_user_id=user.id)
+            await self._publish_event(list_id, WS_EVENT_MEMBER_LEFT, {"user_id": str(user.id)})
 
             notification_service = NotificationService(self.db)
             await notification_service.notify_list_members(
@@ -170,17 +169,26 @@ class ListMemberService(BaseListService):
         if not membership:
             raise NotFoundException("Member not found")
 
-        if data.can_add_item is not None:
-            membership.can_add_item = data.can_add_item
-        if data.can_update_item is not None:
-            membership.can_update_item = data.can_update_item
-        if data.can_delete_item is not None:
-            membership.can_delete_item = data.can_delete_item
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(membership, field, value)
 
         await self.db.commit()
-        await self.db.refresh(membership)
 
-        logger.info("Permissions updated: list_id=%s member=%s", list_id, member_user_id)
+        # Re-fetch with selectinload to avoid DetachedInstanceError/MissingGreenlet during serialization
+        result = await self.db.execute(
+            select(ShoppingListMember)
+            .options(selectinload(ShoppingListMember.user))
+            .where(
+                and_(
+                    ShoppingListMember.shopping_list_id == list_id,
+                    ShoppingListMember.user_id == member_user_id,
+                )
+            )
+        )
+        membership = result.scalar_one()
+
+        logger.info("Member permissions updated")
 
         await self._publish_event(
             list_id,

@@ -8,6 +8,9 @@ from email.mime.text import MIMEText
 import aiosmtplib
 
 from app.core.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class EmailService:
@@ -33,11 +36,9 @@ class EmailService:
             bool: True if sent successfully
         """
         if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-            # In development, just log the email
+            # In development, just log the event
             if settings.is_development:
-                print(f"[DEV EMAIL] To: {to_email}")
-                print(f"[DEV EMAIL] Subject: {subject}")
-                print(f"[DEV EMAIL] Body: {body}")
+                logger.info("Email sent (development mode)")
                 return True
             return False
 
@@ -63,12 +64,8 @@ class EmailService:
                 start_tls=True,
             )
             return True
-        except Exception as e:
-            print(f"Email sending failed: {e}")
-            if settings.is_development:
-                print(f"[DEV FALLBACK] To: {to_email}")
-                print(f"[DEV FALLBACK] Subject: {subject}")
-                print(f"[DEV FALLBACK] Body: {body}")
+        except Exception:
+            logger.error("Email sending failed")
             return False
 
     @classmethod
@@ -114,6 +111,7 @@ The MiniMart Team
 </html>
         """.strip()
 
+        logger.info("Sending OTP verification email")
         return await cls.send_email(to_email, subject, body, html_body)
 
     @classmethod
@@ -173,11 +171,13 @@ The MiniMart Team
     <div class="container">
         <h1>You're Invited! 🛒</h1>
         <p><strong>{inviter_name}</strong> has invited you to collaborate on:</p>
-        <p class="list-name">📝 {list_name}</p>
+        <p class="list-name">{list_name}</p>
         <p>Join them to add items, mark purchases, and keep your shopping synchronized in real-time!</p>
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{accept_url}" class="button accept">✓ Accept Invitation</a>
-            <a href="{reject_url}" class="button reject">✗ Decline</a>
+        <div style="margin: 30px 0;">
+            <p>To accept, copy this link:</p>
+            <p style="font-size: 16px; word-break: break-all; background: #f4f4f4; padding: 10px; border-radius: 4px;">{accept_url}</p>
+            <p>To decline, copy this link:</p>
+            <p style="font-size: 16px; word-break: break-all; background: #f4f4f4; padding: 10px; border-radius: 4px;">{reject_url}</p>
         </div>
         <p class="footer">This invitation will expire in {settings.INVITATION_TOKEN_EXPIRE_HOURS} hours.</p>
     </div>
@@ -185,6 +185,7 @@ The MiniMart Team
 </html>
         """.strip()
 
+        logger.info("Sending shopping list invitation email")
         return await cls.send_email(to_email, subject, body, html_body)
 
     @classmethod
@@ -222,8 +223,9 @@ The MiniMart Team
     <div class="container">
         <h1>Reset Your Password</h1>
         <p>You requested a password reset for your MiniMart account.</p>
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{reset_url}" class="button">Reset Password</a>
+        <div style="margin: 30px 0;">
+            <p>Go to this link to reset:</p>
+            <p style="font-size: 16px; word-break: break-all; background: #f4f4f4; padding: 10px; border-radius: 4px;">{reset_url}</p>
         </div>
         <p>This link will expire in 15 minutes.</p>
         <p class="footer">If you didn't request this, please ignore this email.</p>
@@ -232,4 +234,5 @@ The MiniMart Team
 </html>
         """.strip()
 
+        logger.info("Sending password reset email")
         return await cls.send_email(to_email, subject, body, html_body)

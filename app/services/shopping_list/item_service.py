@@ -14,7 +14,7 @@ from app.common.constants import (
 )
 from app.common.enums import ItemStatus, NotificationType
 from app.core.logging import get_logger
-from app.exceptions import NotFoundException, ValidationException
+from app.exceptions import ConflictException, NotFoundException, ValidationException
 from app.models.item import Item
 from app.models.user import User
 from app.schemas.item import ItemCreate, ItemUpdate
@@ -23,15 +23,29 @@ from app.services.shopping_list.base import BaseListService
 
 logger = get_logger(__name__)
 
+
 class ListItemService(BaseListService):
     """Handles operations on shopping list items."""
 
-    async def add_item(
-        self, list_id: UUID, user: User, data: ItemCreate
-    ) -> Item:
+    async def add_item(self, list_id: UUID, user: User, data: ItemCreate) -> Item:
         """Add an item to a shopping list."""
         shopping_list, membership = await self._get_list_with_access(list_id, user)
         self._check_item_permission(user, membership, "can_add_item")
+
+        # Check for duplicate pending item with same name (case-insensitive or exact as per DB collation)
+        # Usually it's better to be case-insensitive for item names, but let's stick to exact match first if not specified.
+        result = await self.db.execute(
+            select(Item).where(
+                and_(
+                    Item.shopping_list_id == list_id,
+                    Item.name == data.name,
+                    Item.status == ItemStatus.PENDING,
+                    Item.deleted_at.is_(None),
+                )
+            )
+        )
+        if result.scalar_one_or_none():
+            raise ConflictException(f"A pending item  already exists in this list.")
 
         item = Item(
             shopping_list_id=list_id,
@@ -44,7 +58,7 @@ class ListItemService(BaseListService):
         await self.db.commit()
         await self.db.refresh(item)
 
-        logger.info("Item added: item_id=%s list_id=%s", item.id, list_id)
+        logger.info("Item added")
 
         await self._publish_event(
             list_id,
@@ -56,7 +70,6 @@ class ListItemService(BaseListService):
                 "status": item.status.value,
                 "added_by": str(user.id),
             },
-            exclude_user_id=user.id,
         )
 
         notification_service = NotificationService(self.db)
@@ -74,30 +87,29 @@ class ListItemService(BaseListService):
         return item
 
     async def get_items(
-        self, list_id: UUID, user: User, skip: int = 0, limit: int = DEFAULT_PAGE_SIZE
+        self,
+        list_id: UUID,
+        user: User,
+        skip: int = 0,
+        limit: int = DEFAULT_PAGE_SIZE,
+        status: ItemStatus | None = None,
     ) -> tuple[list[Item], int]:
         """Get all items in a shopping list."""
         shopping_list, membership = await self._get_list_with_access(list_id, user)
         self._check_item_permission(user, membership, "can_view")
 
+        conditions = [Item.shopping_list_id == list_id]
+        if status:
+            conditions.append(Item.status == status)
+
         count_result = await self.db.execute(
-            select(func.count()).where(
-                and_(
-                    Item.shopping_list_id == list_id,
-                    Item.deleted_at.is_(None)
-                )
-            )
+            select(func.count()).where(and_(*conditions))
         )
         total = count_result.scalar_one()
 
         result = await self.db.execute(
             select(Item)
-            .where(
-                and_(
-                    Item.shopping_list_id == list_id,
-                    Item.deleted_at.is_(None)
-                )
-            )
+            .where(and_(*conditions))
             .order_by(Item.created_at)
             .offset(skip)
             .limit(limit)
@@ -106,23 +118,15 @@ class ListItemService(BaseListService):
 
         return list(items), total
 
-    async def get_item(
-        self, list_id: UUID, item_id: UUID, user: User
-    ) -> Item:
+    async def get_item(self, list_id: UUID, item_id: UUID, user: User) -> Item:
         """Get a specific item ensuring it belongs to the given list."""
         self._block_super_admin(user)
 
-        result = await self.db.execute(
-            select(Item).where(
-                and_(
-                    Item.id == item_id,
-                    Item.deleted_at.is_(None)
-                )
-            )
-        )
+        result = await self.db.execute(select(Item).where(Item.id == item_id))
         item = result.scalar_one_or_none()
 
         if not item or item.shopping_list_id != list_id:
+            logger.warning("Item not found in this list")
             raise NotFoundException("Item not found in this list")
 
         shopping_list, membership = await self._get_list_with_access(list_id, user)
@@ -130,30 +134,28 @@ class ListItemService(BaseListService):
 
         return item
 
-    async def update_item(
-        self, item_id: UUID, user: User, data: ItemUpdate
-    ) -> Item:
+    async def update_item(self, item_id: UUID, user: User, data: ItemUpdate) -> Item:
         """Update an item (standalone)."""
         self._block_super_admin(user)
 
         result = await self.db.execute(
-            select(Item).where(
-                and_(
-                    Item.id == item_id,
-                    Item.deleted_at.is_(None)
-                )
-            )
+            select(Item).where(and_(Item.id == item_id, Item.deleted_at.is_(None)))
         )
         item = result.scalar_one_or_none()
 
         if not item:
             raise NotFoundException("Item not found")
 
-        shopping_list, membership = await self._get_list_with_access(item.shopping_list_id, user)
+        shopping_list, membership = await self._get_list_with_access(
+            item.shopping_list_id, user
+        )
         self._check_item_permission(user, membership, "can_update_item")
 
         if item.status == ItemStatus.PURCHASED:
-            raise ValidationException("Cannot update an item that has already been purchased")
+            logger.warning("Attempted to update a purchased item")
+            raise ValidationException(
+                "Cannot update an item that has already been purchased"
+            )
 
         item.updated_by = user.id
 
@@ -176,11 +178,14 @@ class ListItemService(BaseListService):
                 "quantity": item.quantity,
                 "status": item.status.value,
             },
-            exclude_user_id=user.id,
         )
 
         notification_service = NotificationService(self.db)
-        notif_type = NotificationType.ITEM_PURCHASED if item.status == ItemStatus.PURCHASED else NotificationType.ITEM_UPDATED
+        notif_type = (
+            NotificationType.ITEM_PURCHASED
+            if item.status == ItemStatus.PURCHASED
+            else NotificationType.ITEM_UPDATED
+        )
         await notification_service.notify_list_members(
             list_id=item.shopping_list_id,
             notification_type=notif_type,
@@ -200,12 +205,7 @@ class ListItemService(BaseListService):
         self._block_super_admin(user)
 
         result = await self.db.execute(
-            select(Item).where(
-                and_(
-                    Item.id == item_id,
-                    Item.deleted_at.is_(None)
-                )
-            )
+            select(Item).where(and_(Item.id == item_id, Item.deleted_at.is_(None)))
         )
         item = result.scalar_one_or_none()
 
@@ -217,12 +217,17 @@ class ListItemService(BaseListService):
         self._check_item_permission(user, membership, "can_delete_item")
 
         from app.core.time import get_now
+
         item.deleted_at = get_now()
         item.deleted_by = user.id
 
         await self.db.commit()
 
-        await self._publish_event(list_id, WS_EVENT_ITEM_DELETED, {"id": str(item_id)}, exclude_user_id=user.id)
+        await self._publish_event(
+            list_id,
+            WS_EVENT_ITEM_DELETED,
+            {"id": str(item_id)},
+        )
 
         notification_service = NotificationService(self.db)
         await notification_service.notify_list_members(

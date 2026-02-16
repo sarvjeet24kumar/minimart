@@ -131,24 +131,24 @@ class RedisService:
     # Password Reset Token Operations
     @classmethod
     async def store_password_reset_jti(
-        cls, jti: str, user_id: str, expire_seconds: int = 900
+        cls, user_id: str, jti: str, expire_seconds: int = 900
     ) -> None:
-        """Store password reset JTI for single-use validation (default 15 min)."""
+        """Store JTI, keyed by user_id to ensure only one active token per user."""
         client = await cls.get_token_client()
-        key = f"password_reset:{jti}"
-        await client.setex(key, expire_seconds, user_id)
+        key = f"password_reset:{user_id}"
+        await client.setex(key, expire_seconds, jti)
 
     @classmethod
-    async def validate_password_reset_jti(cls, jti: str) -> str | None:
-        """Check if password reset JTI exists. Returns user_id or None."""
+    async def get_password_reset_jti(cls, user_id: str) -> str | None:
+        """Get the active password reset JTI for a user."""
         client = await cls.get_token_client()
-        key = f"password_reset:{jti}"
+        key = f"password_reset:{user_id}"
         return await client.get(key)
 
     @classmethod
-    async def delete_password_reset_jti(cls, jti: str) -> None:
+    async def delete_password_reset_jti(cls, user_id: str) -> None:
         """Delete password reset JTI after use."""
         client = await cls.get_token_client()
-        key = f"password_reset:{jti}"
+        key = f"password_reset:{user_id}"
         await client.delete(key)
 

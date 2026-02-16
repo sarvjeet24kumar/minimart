@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.enums import ItemStatus
 from app.core.dependencies import PaginationParams, get_current_verified_user
 from app.core.logging import get_logger
 from app.db.session import get_db
@@ -50,13 +51,14 @@ async def get_items(
     current_user: Annotated[User, Depends(get_current_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
+    status: ItemStatus | None = None,
 ):
     """
     Get all items in a shopping list.
     """
     item_service = ListItemService(db)
     items, total = await item_service.get_items(
-        list_id, current_user, skip=pagination.skip, limit=pagination.size
+        list_id, current_user, skip=pagination.skip, limit=pagination.size, status=status
     )
 
     return PaginatedResponse(

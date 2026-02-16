@@ -9,13 +9,17 @@ from fastapi import  FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
-
 from app.api.health import router as health_router
 from app.core.config import settings
+from app.core.logging import setup_logging
 from app.db.database import close_db, init_db
 from app.exceptions.handlers import setup_exception_handlers
+from app.middleware.logging import LoggingMiddleware
 from app.services.redis_service import RedisService
 from app.websocket.endpoints import router as ws_router
+
+# Initialize logging as early as possible
+setup_logging()
 
 
 @asynccontextmanager
@@ -61,8 +65,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Logging middleware
+app.add_middleware(LoggingMiddleware)
 
-# Include route
+# Include routes
 app.include_router(health_router, prefix="/health")
 app.include_router(api_router)
 app.include_router(ws_router)

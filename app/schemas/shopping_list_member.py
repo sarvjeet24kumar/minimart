@@ -19,6 +19,7 @@ class MemberResponse(BaseModel):
     username: str
     email: str
     role: MemberRole
+    can_view: bool = True
     can_add_item: bool = False
     can_update_item: bool = False
     can_delete_item: bool = False
@@ -30,6 +31,7 @@ class MemberResponse(BaseModel):
 class UpdateMemberPermissions(NormalizedModel):
     """Schema for updating member permissions (Owner/Tenant Admin only)."""
 
+    can_view: bool | None = None
     can_add_item: bool | None = None
     can_update_item: bool | None = None
     can_delete_item: bool | None = None

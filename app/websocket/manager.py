@@ -224,8 +224,9 @@ class ConnectionManager:
 
     async def send_notification_to_user(self, user_id: str, message: dict, related_list_id: str | None = None) -> bool:
         """
-        Send a notification to a specific user, BUT skip connections 
-        that are already explicitly subscribed to the related_list_id.
+        Send a notification to a specific user, BUT only on 'global' scope
+        connections. Chat-scoped connections should never receive notifications.
+        Also skip connections explicitly subscribed to the related_list_id.
         """
         if user_id not in self.active_connections or not self.active_connections[user_id]:
             return False
@@ -234,8 +235,12 @@ class ConnectionManager:
         dead_sockets = []
         success = False
         
-        sockets = list(self.active_connections[user_id].keys())
-        for ws in sockets:
+        sockets = list(self.active_connections[user_id].items())
+        for ws, scope in sockets:
+            # Only deliver notifications to global-scoped connections
+            if scope != "global":
+                continue
+
             if related_list_id:
                 conn_key = (user_id, ws)
                 if related_list_id in self.list_subscribers and conn_key in self.list_subscribers[related_list_id]:

@@ -5,6 +5,7 @@ Common Schemas
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.common.constants import NORMALIZATION_BYPASS_FIELDS
 
 T = TypeVar("T")
 
@@ -21,19 +22,7 @@ class NormalizedModel(BaseModel):
         if not isinstance(data, dict):
             return data
 
-        # Fields that should NEVER be lowercased (sensitive or Enums)
-        bypass_normalization = {
-            "password",
-            "current_password",
-            "new_password",
-            "confirm_password",
-            "token",
-            "refresh_token",
-            "otp",
-            "role",
-            "status",
-            "type",
-        }
+        bypass_normalization = NORMALIZATION_BYPASS_FIELDS
 
         normalized = {}
         for key, value in data.items():

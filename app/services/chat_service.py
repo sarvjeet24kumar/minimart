@@ -92,8 +92,8 @@ class ChatService:
         try:
             await self.db.commit()
             await self.db.refresh(message)
-        except Exception as e:
-            print(f"ChatService: Commit failed: {e}")
+        except Exception:
+            logger.error("Chat message commit failed")
             await self.db.rollback()
             raise
 
@@ -112,6 +112,7 @@ class ChatService:
             broadcast_payload,
             exclude_user_id=None
         )
+        logger.info("Chat message sent")
 
         return broadcast_payload
 
@@ -206,3 +207,4 @@ class ChatService:
 
         message.deleted_at = get_now()
         await self.db.commit()
+        logger.info("Chat message deleted")

@@ -115,6 +115,7 @@ class UserService:
         else:
             await EmailService.send_otp_email(user.email, otp)
 
+        logger.info("User created successfully")
         return user
 
     async def get_user(self, user_id: UUID, requester: User) -> User:
@@ -208,6 +209,7 @@ class UserService:
         await self.db.commit()
 
         updated_user = result.scalar_one()
+        logger.info("User updated")
         return updated_user
 
     async def deactivate_user(self, user_id: UUID, requester: User) -> Response:
@@ -224,4 +226,5 @@ class UserService:
         user.deleted_at = func.now()
         await self.db.commit()
         await self.db.refresh(user)
+        logger.info("User deactivated")
         return Response(status_code=status.HTTP_204_NO_CONTENT)

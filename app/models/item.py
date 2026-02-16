@@ -13,7 +13,7 @@ from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.common.constants import MAX_LENGTH_NAME
+from app.common.constants import MAX_LENGTH_NAME, MIN_ITEM_QUANTITY, MAX_ITEM_QUANTITY, DEFAULT_ITEM_QUANTITY
 from app.common.enums import ItemStatus
 from app.models.base import BaseModel
 
@@ -25,7 +25,7 @@ class Item(BaseModel):
 
     __tablename__ = "items"
     __table_args__ = (
-        CheckConstraint("quantity > 0", name="check_quantity_positive"),
+        CheckConstraint(f"quantity >= {MIN_ITEM_QUANTITY}", name="check_quantity_positive"),
         Index("idx_items_shopping_list", "shopping_list_id"),
         Index("idx_items_added_by", "added_by"),
     )
@@ -51,7 +51,7 @@ class Item(BaseModel):
         nullable=True,
     )
     name: Mapped[str] = mapped_column(String(MAX_LENGTH_NAME), nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=DEFAULT_ITEM_QUANTITY, nullable=False)
     status: Mapped[ItemStatus] = mapped_column(
         ENUM(ItemStatus, name="item_status", create_type=True),
         default=ItemStatus.PENDING,

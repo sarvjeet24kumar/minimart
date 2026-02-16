@@ -43,6 +43,7 @@ class InvitationManagementService(BaseInvitationService):
     ) -> datetime:
         """Create a DB-backed invitation to join a shopping list."""
         if inviter.role == UserRole.SUPER_ADMIN:
+            logger.warning("Super Admin attempted shopping list operation")
             raise ForbiddenException("Super Admin cannot access shopping list operations")
 
         result = await self.db.execute(
@@ -51,12 +52,15 @@ class InvitationManagementService(BaseInvitationService):
         shopping_list = result.scalar_one_or_none()
 
         if not shopping_list:
+            logger.warning("Shopping list not found for invitation")
             raise NotFoundException("Shopping list not found")
 
         if shopping_list.tenant_id != inviter.tenant_id:
+            logger.warning("Cross-tenant invitation access denied")
             raise ForbiddenException("Cross-tenant access denied")
 
         if inviter.role != UserRole.TENANT_ADMIN and shopping_list.owner_id != inviter.id:
+            logger.warning("Unauthorized invitation attempt (not owner/admin)")
             raise ForbiddenException(
                 "Only the list owner or tenant admin can send invitations"
             )
@@ -72,9 +76,11 @@ class InvitationManagementService(BaseInvitationService):
         invitee = result.scalar_one_or_none()
 
         if not invitee:
+            logger.warning("Invitee user not found in tenant")
             raise NotFoundException("User not found in this tenant.")
 
         if not invitee.is_active:
+            logger.warning("Attempted to invite inactive user")
             raise ValidationException("Cannot invite inactive user")
 
         result = await self.db.execute(
@@ -86,6 +92,7 @@ class InvitationManagementService(BaseInvitationService):
             )
         )
         if result.scalar_one_or_none():
+            logger.info("User is already a member of this list")
             raise ConflictException("User is already a member of this list")
 
         result = await self.db.execute(
@@ -98,6 +105,7 @@ class InvitationManagementService(BaseInvitationService):
             )
         )
         if result.scalar_one_or_none():
+            logger.info("Pending invitation already exists for this user")
             raise ConflictException("A pending invitation already exists for this user.")
 
         expires_delta = timedelta(hours=settings.INVITATION_TOKEN_EXPIRE_HOURS)
@@ -122,11 +130,14 @@ class InvitationManagementService(BaseInvitationService):
         self.db.add(invite)
         await self.db.commit()
         await self.db.refresh(invite)
+        
+        logger.info("Invitation created")
 
         accept_url = f"{settings.INVITATION_BASE_URL}/accept?token={token}"
         reject_url = f"{settings.INVITATION_BASE_URL}/reject?token={token}"
 
         if background_tasks:
+            logger.info("Staging invitation email background task")
             background_tasks.add_task(
                 EmailService.send_invitation_email,
                 to_email=invitee.email,
@@ -136,6 +147,7 @@ class InvitationManagementService(BaseInvitationService):
                 reject_url=reject_url,
             )
         else:
+            logger.info("Sending invitation email synchronously")
             await EmailService.send_invitation_email(
                 to_email=invitee.email,
                 inviter_name=inviter.username,
@@ -152,6 +164,7 @@ class InvitationManagementService(BaseInvitationService):
         }, exclude_user_id=inviter.id)
 
         notification_service = NotificationService(self.db)
+        logger.info("Creating  invitation notification")
         await notification_service.create_notification(
             user_id=invitee.id,
             notification_type=NotificationType.LIST_INVITE,
@@ -170,6 +183,7 @@ class InvitationManagementService(BaseInvitationService):
     ) -> None:
         """Cancel an invitation."""
         if user.role == UserRole.SUPER_ADMIN:
+            logger.warning("Super Admin attempted shopping list operation")
             raise ForbiddenException("Super Admin cannot access shopping list operations")
 
         result = await self.db.execute(
@@ -180,17 +194,21 @@ class InvitationManagementService(BaseInvitationService):
         invite = result.scalar_one_or_none()
 
         if not invite:
+            logger.warning("Invitation not found for cancellation")
             raise NotFoundException("Invitation not found")
 
         shopping_list = invite.shopping_list
 
         if shopping_list.tenant_id != user.tenant_id:
+            logger.warning("Cross-tenant cancellation access denied")
             raise ForbiddenException("Cross-tenant access denied")
 
         if user.role != UserRole.TENANT_ADMIN and shopping_list.owner_id != user.id:
+            logger.warning("Unauthorized cancellation attempt (not owner/admin)")
             raise ForbiddenException("Only the list owner or tenant admin can cancel invitations")
 
         if invite.status != InviteStatus.PENDING:
+            logger.warning("Attempted to cancel non-pending invitation")
             raise MiniMartException(
                 status_code=400,
                 code="INVITE_NOT_PENDING",
@@ -200,6 +218,8 @@ class InvitationManagementService(BaseInvitationService):
         invite.status = InviteStatus.CANCELLED
         invite.cancelled_at = get_now()
         await self.db.commit()
+
+        logger.info("Invitation cancelled")
 
         await self._broadcast(invite.shopping_list_id, "invite_cancelled", {
             "invite_id": str(invite.id),
@@ -214,6 +234,7 @@ class InvitationManagementService(BaseInvitationService):
     ) -> datetime:
         """Resend an invitation."""
         if user.role == UserRole.SUPER_ADMIN:
+            logger.warning("Super Admin attempted shopping list operation")
             raise ForbiddenException("Super Admin cannot access shopping list operations")
 
         result = await self.db.execute(
@@ -227,17 +248,21 @@ class InvitationManagementService(BaseInvitationService):
         invite = result.scalar_one_or_none()
 
         if not invite:
+            logger.warning("Invitation not found for resend")
             raise NotFoundException("Invitation not found")
 
         shopping_list = invite.shopping_list
 
         if shopping_list.tenant_id != user.tenant_id:
+            logger.warning("Cross-tenant resend access denied")
             raise ForbiddenException("Cross-tenant access denied")
 
         if user.role != UserRole.TENANT_ADMIN and shopping_list.owner_id != user.id:
+            logger.warning("Unauthorized resend attempt (not owner/admin)")
             raise ForbiddenException("Only the list owner or tenant admin can resend invitations")
 
         if invite.status != InviteStatus.PENDING:
+            logger.warning("Attempted to resend non-pending invitation")
             raise MiniMartException(
                 status_code=400,
                 code="INVITE_NOT_PENDING",
@@ -258,10 +283,13 @@ class InvitationManagementService(BaseInvitationService):
         invite.resent_at = get_now()
         await self.db.commit()
 
+        logger.info("Invitation resent")
+
         accept_url = f"{settings.INVITATION_BASE_URL}/accept?token={new_token}"
         reject_url = f"{settings.INVITATION_BASE_URL}/reject?token={new_token}"
 
         if background_tasks:
+            logger.info("Staging resent invitation email background task")
             background_tasks.add_task(
                 EmailService.send_invitation_email,
                 to_email=invite.invited_user.email,
@@ -271,6 +299,7 @@ class InvitationManagementService(BaseInvitationService):
                 reject_url=reject_url,
             )
         else:
+            logger.info("Sending resent invitation email synchronously")
             await EmailService.send_invitation_email(
                 to_email=invite.invited_user.email,
                 inviter_name=user.username,
@@ -291,6 +320,7 @@ class InvitationManagementService(BaseInvitationService):
     ) -> tuple[list[ShoppingListInvite], int]:
         """Get invitations for a specific list."""
         if user.role == UserRole.SUPER_ADMIN:
+            logger.warning("Super Admin attempted shopping list operation")
             raise ForbiddenException("Super Admin cannot access shopping list operations")
 
         result = await self.db.execute(
@@ -298,12 +328,15 @@ class InvitationManagementService(BaseInvitationService):
         )
         shopping_list = result.scalar_one_or_none()
         if not shopping_list:
+            logger.warning("Shopping list not found for invitation retrieval")
             raise NotFoundException("Shopping list not found")
 
         if shopping_list.tenant_id != user.tenant_id:
+            logger.warning("Cross-tenant invitation retrieval access denied")
             raise ForbiddenException("Cross-tenant access denied")
 
         if user.role != UserRole.TENANT_ADMIN and shopping_list.owner_id != user.id:
+            logger.warning("Unauthorized invitation view attempt (not owner/admin)")
             raise ForbiddenException("Only the list owner or tenant admin can view invitations")
 
         query = select(ShoppingListInvite).options(
@@ -334,6 +367,7 @@ class InvitationManagementService(BaseInvitationService):
         limit: int = 20,
     ) -> tuple[list[ShoppingListInvite], int]:
         """Get invitations sent to the current user."""
+        self._block_super_admin(user)
         query = select(ShoppingListInvite).options(
             selectinload(ShoppingListInvite.shopping_list),
             selectinload(ShoppingListInvite.invited_by_user),

@@ -3,13 +3,16 @@ WebSocket Endpoints
 """
 
 import json as _json
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
@@ -19,6 +22,18 @@ from app.websocket.handlers import WebSocketHandler
 from app.websocket.manager import manager
 
 router = APIRouter()
+
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "templates"
+
+if settings.is_development:
+
+    @router.get("/test/chat")
+    async def chat_test_page():
+        return FileResponse(_TEMPLATES_DIR / "chat.html", media_type="text/html")
+
+    @router.get("/test/notifications")
+    async def notifications_test_page():
+        return FileResponse(_TEMPLATES_DIR / "notifications.html", media_type="text/html")
 
 @router.websocket("/ws")
 async def websocket_endpoint(

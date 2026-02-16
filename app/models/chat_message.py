@@ -5,9 +5,11 @@ Chat Message Model
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.common.constants import MAX_CHAT_MESSAGE_LENGTH
 
 from app.models.base import BaseModel
 
@@ -27,6 +29,7 @@ class ChatMessage(BaseModel):
         Index("idx_chat_shopping_list_id", "shopping_list_id"),
         Index("idx_chat_sender_id", "sender_id"),
         Index("idx_chat_created_at", "shopping_list_id", "created_at"),
+        CheckConstraint(f"length(content) <= {MAX_CHAT_MESSAGE_LENGTH}", name="check_chat_message_length"),
     )
 
     shopping_list_id: Mapped[uuid.UUID] = mapped_column(
@@ -39,7 +42,7 @@ class ChatMessage(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(String(MAX_CHAT_MESSAGE_LENGTH), nullable=False)
 
     shopping_list: Mapped["ShoppingList"] = relationship(
         "ShoppingList", back_populates="chat_messages"

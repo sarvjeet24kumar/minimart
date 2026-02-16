@@ -10,12 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.logging import get_logger
 from app.common.enums import MemberRole, UserRole
 from app.exceptions import ForbiddenException, NotFoundException
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
 from app.websocket.manager import manager
+
+
+logger = get_logger(__name__)
 
 
 class BaseListService:
@@ -27,6 +31,7 @@ class BaseListService:
     def _block_super_admin(self, user: User) -> None:
         """Block Super Admin from all shopping list operations."""
         if user.role == UserRole.SUPER_ADMIN:
+            logger.warning("Super Admin attempted shopping list operation")
             raise ForbiddenException("Super Admin cannot access shopping list operations")
 
     async def _get_list_with_access(
@@ -51,9 +56,11 @@ class BaseListService:
         shopping_list = result.scalar_one_or_none()
 
         if not shopping_list:
+            logger.warning("Shopping list not found")
             raise NotFoundException("Shopping list not found")
 
         if shopping_list.tenant_id != user.tenant_id:
+            logger.warning("Cross-tenant access denied to shopping list")
             raise ForbiddenException("Cross-tenant access denied")
 
         if user.role == UserRole.TENANT_ADMIN:
@@ -66,9 +73,11 @@ class BaseListService:
             (m for m in shopping_list.members if m.user_id == user.id), None
         )
         if not membership:
+            logger.warning("Unauthorized access attempt: Not a member of this list")
             raise ForbiddenException("You are not a member of this list")
 
         if require_owner_or_admin and membership.role != MemberRole.OWNER:
+            logger.warning("Unauthorized action attempt: Owner or Tenant Admin required")
             raise ForbiddenException("Only the owner can perform this action")
 
         return shopping_list, membership
@@ -83,12 +92,14 @@ class BaseListService:
             return
 
         if not membership:
+            logger.warning("Item permission check failed: Not a member")
             raise ForbiddenException("You are not a member of this list")
 
         if membership.role == MemberRole.OWNER:
             return
 
         if not getattr(membership, permission, False):
+            logger.warning(f"Item permission check failed: Missing {permission}")
             raise ForbiddenException("You don't have permission to perform this action")
 
     async def _publish_event(

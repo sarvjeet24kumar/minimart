@@ -32,7 +32,8 @@
                 return;
             }
 
-            const url = `ws://localhost:8000/ws/shopping-lists/${lid}/chat?token=${token}`;
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${wsProtocol}//${window.location.host}/ws/shopping-lists/${lid}/chat?token=${token}`;
 
             document.getElementById('status').innerText = 'Connecting...';
             ws = new WebSocket(url);

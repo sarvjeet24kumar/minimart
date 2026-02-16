@@ -9,9 +9,12 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.exceptions import ConflictException, NotFoundException
 from app.models.tenant import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate
+
+logger = get_logger(__name__)
 
 
 class TenantService:
@@ -26,6 +29,7 @@ class TenantService:
         """
         result = await self.db.execute(select(Tenant).where(Tenant.slug == data.slug))
         if result.scalar_one_or_none():
+            logger.info("Tenant creation failed: Slug already exists")
             raise ConflictException("Slug already exists")
 
         tenant = Tenant(
@@ -35,6 +39,7 @@ class TenantService:
         self.db.add(tenant)
         await self.db.commit()
         await self.db.refresh(tenant)
+        logger.info("New tenant created successfully")
         return tenant
 
     async def get_tenant(self, tenant_id: UUID) -> Tenant:
@@ -45,6 +50,7 @@ class TenantService:
         tenant = result.scalar_one_or_none()
 
         if not tenant:
+            logger.warning("Tenant not found")
             raise NotFoundException("Tenant not found")
 
         return tenant
@@ -73,6 +79,7 @@ class TenantService:
                 select(Tenant).where(Tenant.slug == update_data["slug"])
             )
             if result.scalar_one_or_none():
+                logger.info("Tenant update failed: New slug already exists")
                 raise ConflictException("Slug already exists")
 
         for field, value in update_data.items():
@@ -80,6 +87,7 @@ class TenantService:
 
         await self.db.commit()
         await self.db.refresh(tenant)
+        logger.info("Tenant updated successfully")
         return tenant
 
     async def delete_tenant(self, tenant_id: UUID) -> Tenant:
@@ -88,10 +96,12 @@ class TenantService:
         """
         tenant = await self.get_tenant(tenant_id)
         if tenant.deleted_at:
+            logger.info("Tenant deletion failed: Already deleted")
             raise ConflictException("Tenant already deleted")
 
         tenant.deleted_at = func.now()
         tenant.is_active = False
         await self.db.commit()
         await self.db.refresh(tenant)
+        logger.info("Tenant deactivated successfully")
         return tenant

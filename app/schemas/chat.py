@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.common.constants import MAX_CHAT_MESSAGE_LENGTH
+from app.common.constants import MAX_CHAT_MESSAGE_LENGTH, MIN_LENGTH_CHAT_MESSAGE
 from app.schemas.common import NormalizedModel
 
 
@@ -15,7 +15,7 @@ class ChatMessageRequest(NormalizedModel):
     """Schema for sending a chat message."""
 
     message: str = Field(
-        ..., min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH,
+        ..., min_length=MIN_LENGTH_CHAT_MESSAGE, max_length=MAX_CHAT_MESSAGE_LENGTH,
         description="Chat message content",
     )
 

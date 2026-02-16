@@ -11,16 +11,18 @@ from app.common.enums import ItemStatus, MemberRole
 from app.schemas.common import NormalizedModel
 
 
+from app.common.constants import MAX_LENGTH_NAME, MIN_LENGTH_NAME
+
 class ShoppingListCreate(NormalizedModel):
     """Shopping list creation schema."""
 
-    name: str = Field(..., min_length=1, max_length=255)
+    name: str = Field(..., min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME)
 
 
 class ShoppingListUpdate(NormalizedModel):
     """Shopping list update schema."""
 
-    name: str | None = Field(None, min_length=1, max_length=255)
+    name: str | None = Field(None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME)
 
 
 class MemberBrief(BaseModel):
