@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>MiniMart Notification Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        .notification {
+            background: #f0f7ff;
+            border-left: 5px solid #007bff;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        #status {
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>MiniMart Notification Monitor</h2>
+
+
+    <input type="text" id="token" placeholder="Paste Access Token (JWT)" style="width: 400px; padding: 8px;">
+    <button onclick="connect()" style="padding: 8px 15px;">Connect</button>
+
+    <div style="margin-top: 10px;">
+        <input type="text" id="list_id" placeholder="Shopping List ID (UUID)" style="width: 400px; padding: 8px;">
+        <button onclick="subscribe()" style="padding: 8px 15px;">Subscribe</button>
+        <button onclick="unsubscribe()" style="padding: 8px 15px; background-color: #f8d7da;">Unsubscribe</button>
+    </div>
+
+    <div id="status">Status: Disconnected</div>
+    <hr>
+    <h3>Live Notifications & Events:</h3>
+    <div id="log"></div>
+
+    <script>
+        let ws;
+        let heartbeatInterval;
+        let reconnectTimeout;
+        let isManuallyClosed = false;
+
+        function logToUI(message, color = 'black') {
+            const log = document.getElementById('log');
+            log.innerHTML = `<div style="color: ${color}; font-size: 0.9em; margin: 2px 0;">${new Date().toLocaleTimeString()} - ${message}</div>` + log.innerHTML;
+        }
+
+        function subscribe() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("Connect first");
+            const listId = document.getElementById('list_id').value;
+            if (!listId) return alert("Enter a List ID");
+
+            ws.send(JSON.stringify({
+                type: 'subscribe',
+                payload: { list_id: listId }
+            }));
+            logToUI(`[Sent] Subscribe to ${listId}`, 'blue');
+        }
+
+        function unsubscribe() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("Connect first");
+            const listId = document.getElementById('list_id').value;
+            if (!listId) return alert("Enter a List ID");
+
+            ws.send(JSON.stringify({
+                type: 'unsubscribe',
+                payload: { list_id: listId }
+            }));
+            logToUI(`[Sent] Unsubscribe from ${listId}`, '#6610f2');
+        }
+
+        function connect() {
+            isManuallyClosed = false;
+            // Close existing connection if any
+            if (ws) {
+                isManuallyClosed = true;
+                ws.close();
+            }
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
+
+            const token = document.getElementById('token').value;
+            if (!token) return alert("Please paste a token");
+
+            const url = `ws://localhost:8000/ws?token=${token}`;
+            ws = new WebSocket(url);
+            logToUI('Attempting to connect...', 'gray');
+
+            ws.onopen = () => {
+                isManuallyClosed = false;
+                document.getElementById('status').innerText = 'Status: Connected';
+                document.getElementById('status').style.color = 'green';
+                logToUI('Connected to WebSocket', 'green');
+
+                // Start heartbeat
+                heartbeatInterval = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'ping' }));
+                        console.log('Heartbeat sent');
+                    }
+                }, 30000);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'pong') {
+                    console.log('Heartbeat received');
+                    return;
+                }
+
+                const log = document.getElementById('log');
+                let html = `<div class="notification">`;
+                html += `<strong>Type:</strong> ${data.type}<br>`;
+                html += `<pre>${JSON.stringify(data.payload, null, 2)}</pre>`;
+                html += `</div>`;
+
+                log.innerHTML = html + log.innerHTML;
+            };
+
+            ws.onclose = (event) => {
+                document.getElementById('status').innerText = `Status: Disconnected (${event.reason || 'No reason'})`;
+                document.getElementById('status').style.color = 'red';
+                logToUI(`Disconnected: ${event.reason || 'No reason'}`, 'red');
+
+                if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+                // Auto-reconnect if not manually closed
+                if (!isManuallyClosed) {
+                    logToUI('Attempting auto-reconnect in 5 seconds...', 'orange');
+                    reconnectTimeout = setTimeout(connect, 5000);
+                }
+            };
+
+            ws.onerror = (error) => {
+                logToUI('WebSocket Error observed', 'red');
+            };
+        }
+    </script>
+</body>
+
+</html>
