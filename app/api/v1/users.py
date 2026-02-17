@@ -67,13 +67,10 @@ async def create_user(
 
 @router.get(
     "",
-    response_model=PaginatedResponse[UserAdminResponse],
     status_code=status.HTTP_200_OK,
 )
 async def list_users(
-    current_user: Annotated[
-        User, Depends(require_role(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN))
-    ],
+    current_user: Annotated[User, Depends(get_current_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
 ):
@@ -84,17 +81,29 @@ async def list_users(
 
     if current_user.role == UserRole.SUPER_ADMIN:
         items, total = await user_service.get_users_in_tenant(
-            skip=pagination.skip, limit=pagination.size
+            requester=current_user,
+            skip=pagination.skip, 
+            limit=pagination.size
         )
     else:
         items, total = await user_service.get_users_in_tenant(
+            requester=current_user,
             tenant_id=current_user.tenant_id,
             skip=pagination.skip,
             limit=pagination.size,
         )
 
+    if current_user.role in [UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN]:
+        return PaginatedResponse(
+            data=[UserAdminResponse.model_validate(u) for u in items],
+            total=total,
+            page=pagination.page,
+            size=pagination.size,
+            pages=ceil(total / pagination.size) if total > 0 else 1,
+        )
+
     return PaginatedResponse(
-        data=[UserAdminResponse.model_validate(u) for u in items],
+        data=[UserResponse.model_validate(u) for u in items],
         total=total,
         page=pagination.page,
         size=pagination.size,

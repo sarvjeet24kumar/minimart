@@ -90,9 +90,9 @@ class AuthService:
             logger.warning("Failed login attempt")
             raise UnauthorizedException("Invalid email or password")
 
-        if not user.is_active:
-            logger.warning("Login failed: User account is inactive")
-            raise ForbiddenException("User account is inactive")
+        if not (user.is_active and not user.deleted_at):
+            logger.warning("Login failed: User account is inactive or deleted")
+            raise ForbiddenException("User account is inactive or deleted")
 
         if not user.is_email_verified:
             logger.warning("Login failed: Email not verified")
@@ -165,7 +165,7 @@ class AuthService:
         else:
             logger.info("Sending verification OTP email synchronously")
             await EmailService.send_otp_email(email, otp)
-            
+
         logger.info("Verification OTP sent")
 
     async def verify_email(self, email: str, otp: str, tenant_id: UUID) -> bool:
@@ -312,7 +312,7 @@ class AuthService:
                 )
                 self.db.add(blacklisted)
                 await self.db.commit()
-        
+
         logger.info("User logged out")
         await manager.disconnect_all_for_user(str(user_id))
 
@@ -343,9 +343,9 @@ class AuthService:
         result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
         user = result.scalar_one_or_none()
 
-        if not user or not user.is_active:
-            logger.warning("Token refresh failed: User not found or inactive")
-            raise UnauthorizedException("User not found or inactive")
+        if not user or not (user.is_active and not user.deleted_at):
+            logger.warning("Token refresh failed: User not found, inactive, or deleted")
+            raise UnauthorizedException("User not found, inactive, or deleted")
 
         access_token = create_access_token(
             user_id=user.id,
@@ -375,8 +375,9 @@ class AuthService:
         validate_password_strength(new_password)
 
         user.password = hash_password(new_password)
-        await self.db.commit()
 
+        await self.db.commit()
+        logger.info("Password changed sucessfully")
         return True
 
     async def forgot_password(
@@ -418,7 +419,7 @@ class AuthService:
         else:
             logger.info("Sending password reset email synchronously")
             await EmailService.send_password_reset_email(user.email, reset_url)
-            
+
         logger.info("Password reset link sent")
 
     async def reset_password(

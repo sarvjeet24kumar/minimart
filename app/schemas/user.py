@@ -26,26 +26,40 @@ class UserBase(NormalizedModel):
     """Base user schema."""
 
     email: EmailStr
-    username: str = Field(..., min_length=MIN_LENGTH_USERNAME, max_length=MAX_LENGTH_USERNAME, pattern=REGEX_USERNAME)
+    username: str = Field(
+        ...,
+        min_length=MIN_LENGTH_USERNAME,
+        max_length=MAX_LENGTH_USERNAME,
+        pattern=REGEX_USERNAME,
+    )
     first_name: str = Field(..., min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME)
     last_name: str = Field(..., min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME)
 
 
-
-    
 class UserCreate(UserBase):
     """User creation schema."""
 
-    password: str = Field(..., min_length=MIN_LENGTH_PASSWORD, max_length=MAX_LENGTH_PASSWORD_RAW)
+    password: str = Field(
+        ..., min_length=MIN_LENGTH_PASSWORD, max_length=MAX_LENGTH_PASSWORD_RAW
+    )
     tenant_id: UUID | None = None
 
 
 class UserUpdate(NormalizedModel):
     """User update schema."""
 
-    username: str | None = Field(None, min_length=MIN_LENGTH_USERNAME, max_length=MAX_LENGTH_USERNAME, pattern=REGEX_USERNAME)
-    first_name: str | None = Field(None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME)
-    last_name: str | None = Field(None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME)
+    username: str | None = Field(
+        None,
+        min_length=MIN_LENGTH_USERNAME,
+        max_length=MAX_LENGTH_USERNAME,
+        pattern=REGEX_USERNAME,
+    )
+    first_name: str | None = Field(
+        None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME
+    )
+    last_name: str | None = Field(
+        None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME
+    )
     is_active: bool | None = None
     deleted_at: datetime | None = None
 
@@ -58,7 +72,8 @@ class UserResponse(NormalizedModel):
     username: str
     first_name: str
     last_name: str
-    tenant_id: UUID | None = None
+    role: UserRole
+
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,17 +81,19 @@ class UserResponse(NormalizedModel):
 class UserAdminResponse(UserResponse):
     """Admin-level user response with status and lifecycle fields."""
 
-    role: UserRole
     is_email_verified: bool
     is_active: bool
+    tenant_id: UUID | None = None
     deleted_at: datetime | None = None
     created_at: datetime
-
-
 
 
 class ChangePasswordRequest(NormalizedModel):
     """Change password request."""
 
-    current_password: str = Field(..., min_length=1) # Keeping this as 1 for existing logins
-    new_password: str = Field(..., min_length=MIN_LENGTH_PASSWORD, max_length=MAX_LENGTH_PASSWORD_RAW)
+    current_password: str = Field(
+        ..., min_length=1
+    )  # Keeping this as 1 for existing logins
+    new_password: str = Field(
+        ..., min_length=MIN_LENGTH_PASSWORD, max_length=MAX_LENGTH_PASSWORD_RAW
+    )

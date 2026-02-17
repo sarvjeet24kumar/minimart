@@ -62,8 +62,8 @@ async def websocket_endpoint(
         )
         user = result.scalar_one_or_none()
         
-        if not user or not user.is_active:
-            await websocket.close(code=4001, reason="User not found or inactive")
+        if not user or not (user.is_active and not user.deleted_at):
+            await websocket.close(code=4001, reason="User not found, inactive, or deleted")
             return
         
     except JWTError as e:
@@ -118,8 +118,8 @@ async def chat_websocket_endpoint(
         )
         user = result.scalar_one_or_none()
 
-        if not user or not user.is_active:
-            await websocket.close(code=4001, reason="User not found or inactive")
+        if not user or not (user.is_active and not user.deleted_at):
+            await websocket.close(code=4001, reason="User not found, inactive, or deleted")
             return
 
     except JWTError as e:

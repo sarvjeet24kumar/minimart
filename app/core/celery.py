@@ -20,10 +20,10 @@ celery_app = Celery(
 celery_app.conf.beat_schedule = {
     "expire-invitations-every-hour": {
         "task": "app.tasks.expire_invites",
-        "schedule": timedelta(minutes=1),
+        "schedule": timedelta(hours=1),
     },
     "cleanup-maintenance-every-24h": {
         "task": "app.tasks.cleanup_maintenance",
-        "schedule": timedelta(minutes=2),
+        "schedule": timedelta(hours=24),
     },
 }

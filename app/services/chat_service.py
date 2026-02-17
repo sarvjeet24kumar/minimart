@@ -87,7 +87,7 @@ class ChatService:
         )
         shopping_list = result.scalar_one_or_none()
         if shopping_list and shopping_list.deleted_at:
-            raise ForbiddenException("This list is deleted. Chat is in read-only mode.")
+            raise ForbiddenException("This list is deleted.")
 
         await self._verify_membership(list_id, user)
 

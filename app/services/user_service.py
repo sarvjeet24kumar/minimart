@@ -132,8 +132,6 @@ class UserService:
             return user
 
         if requester.role == UserRole.SUPER_ADMIN:
-            if user.role != UserRole.TENANT_ADMIN:
-                raise ForbiddenException("Can only access Tenant Admin accounts")
             return user
 
         if requester.role == UserRole.TENANT_ADMIN:
@@ -141,10 +139,18 @@ class UserService:
                 raise ForbiddenException("Can only access users in their own tenant")
             return user
 
+        if requester.role == UserRole.USER:
+            if user.tenant_id != requester.tenant_id:
+                raise ForbiddenException("Can only access users in their own tenant")
+            if not (user.is_active and not user.deleted_at):
+                raise ForbiddenException("User account is inactive or deleted")
+            return user
+
         raise ForbiddenException("Access denied")
 
     async def get_users_in_tenant(
         self,
+        requester: User,
         tenant_id: UUID | None = None,
         skip: int = 0,
         limit: int = 100,
@@ -156,9 +162,14 @@ class UserService:
         count_query = select(func.count(User.id))
 
         filters = []
+        # Regular users only see active/non-deleted users
+        if requester.role == UserRole.USER:
+            filters.extend([User.is_active.is_(True), User.deleted_at.is_(None)])
+            
         if tenant_id:
             filters.append(User.tenant_id == tenant_id)
         else:
+            # Super admins see tenant admins
             filters.append(User.role == UserRole.TENANT_ADMIN)
 
         if filters:
@@ -180,10 +191,15 @@ class UserService:
         Update a user with access control and restrictions.
         """
         user = await self.get_user(user_id, requester)
+        
+        # Regular users can only update their own account
+        if requester.role == UserRole.USER and requester.id != user.id:
+            raise ForbiddenException("Users can only update their own account")
+
         target_tenant_id = user.tenant_id
         update_data = data.model_dump(exclude_unset=True)
         if requester.id == user.id:
-            if data.is_active is not None or data.deleted_at is not None:
+            if data.is_active is not None or (hasattr(data, 'deleted_at') and data.deleted_at is not None):
                 raise ForbiddenException(
                     "You cannot modify your own account status (active/deleted)"
                 )
@@ -217,10 +233,19 @@ class UserService:
         Deactivate a user (soft delete).
         """
         user = await self.get_user(user_id, requester)
+        
+        # Access control based on roles
+        if requester.role == UserRole.USER:
+            if requester.id != user.id:
+                raise ForbiddenException("Users are not allowed to deactivate other accounts")
+            # Users ARE allowed to deactivate their own account
+        else:
+            # Admins (Tenant/Super) shouldn't deactivate their own accounts to prevent lockouts
+            if requester.id == user.id:
+                raise ForbiddenException("Admins cannot deactivate their own account")
+
         if not user.is_active and user.deleted_at is not None:
             raise ConflictException("User is already deactivated")
-        if requester.id == user.id:
-            raise ForbiddenException("You cannot deactivate your own account")
 
         user.is_active = False
         user.deleted_at = func.now()

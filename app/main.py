@@ -8,11 +8,10 @@ import uvicorn
 from fastapi import  FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from slowapi.middleware import SlowAPIMiddleware
 from app.api import api_router
 from app.api.health import router as health_router
 from app.core.config import settings
-from app.core.rate_limit import limiter
+from app.core.rate_limit import RateLimit
 from app.core.logging import setup_logging
 from app.db.database import close_db, init_db
 from app.exceptions.handlers import setup_exception_handlers
@@ -55,11 +54,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Attach limiter to app state
-app.state.limiter = limiter
-
-# Global rate limiting middleware
-app.add_middleware(SlowAPIMiddleware)
+# Rate limiting is now handled via dependencies in routers
 
 # Setup exception handlers
 setup_exception_handlers(app)

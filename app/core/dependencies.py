@@ -88,8 +88,8 @@ async def get_current_user(
     if not user:
         raise UnauthorizedException("User not found")
 
-    if not user.is_active:
-        raise ForbiddenException("User account is inactive")
+    if not (user.is_active and not user.deleted_at):
+        raise ForbiddenException("User account is inactive or deleted")
 
     if user.tenant_id:
         result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
