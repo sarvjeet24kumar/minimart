@@ -54,7 +54,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Rate limiting is now handled via dependencies in routers
+
 
 # Setup exception handlers
 setup_exception_handlers(app)

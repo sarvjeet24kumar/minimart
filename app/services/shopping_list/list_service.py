@@ -14,6 +14,7 @@ from app.common.constants import (
 )
 from app.common.enums import ItemStatus, MemberRole, NotificationType, UserRole
 from app.core.logging import get_logger
+from app.exceptions import ForbiddenException
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
@@ -116,13 +117,12 @@ class ShoppingListService(BaseListService):
 
             return list(shopping_lists), total
         else:
-            # Regular users see their active memberships, or include archived ones
-            # For the count, we need to join with ShoppingList to check for its deleted_at as well
-            filter_cond = [ShoppingListMember.user_id == user.id]
-            if not include_archived:
-                filter_cond.append(ShoppingListMember.deleted_at.is_(None))
-                # Only show lists that are not deleted either
-                filter_cond.append(ShoppingList.deleted_at.is_(None))
+            # Regular users only see active memberships on non-deleted lists
+            filter_cond = [
+                ShoppingListMember.user_id == user.id,
+                ShoppingListMember.deleted_at.is_(None),
+                ShoppingList.deleted_at.is_(None),
+            ]
 
             count_result = await self.db.execute(
                 select(func.count())
@@ -163,15 +163,31 @@ class ShoppingListService(BaseListService):
     ) -> ShoppingList:
         """
         Update a shopping list.
+        Tenant Admin can also set deleted_at to None to restore a deleted list.
         """
         shopping_list, _ = await self._get_list_with_access(
             list_id, user, require_owner_or_admin=True
         )
 
-        self._check_not_deleted(shopping_list)
+        # Handle deleted_at field — Tenant Admin only
+        is_restoring = False
+        if "deleted_at" in data.model_fields_set:
+            if user.role != UserRole.TENANT_ADMIN:
+                raise ForbiddenException(
+                    "Only Tenant Admins can modify the deleted_at field"
+                )
+            if data.deleted_at is None and shopping_list.deleted_at:
+                is_restoring = True
+
+        # Block mutations on deleted lists unless restoring
+        if not is_restoring:
+            self._check_not_deleted(shopping_list)
 
         if data.name is not None:
             shopping_list.name = data.name
+
+        if "deleted_at" in data.model_fields_set:
+            shopping_list.deleted_at = data.deleted_at
 
         await self.db.commit()
         await self.db.refresh(shopping_list)

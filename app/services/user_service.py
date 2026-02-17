@@ -132,6 +132,8 @@ class UserService:
             return user
 
         if requester.role == UserRole.SUPER_ADMIN:
+            if user.role != UserRole.TENANT_ADMIN:
+                raise ForbiddenException("Can only access Tenant Admin accounts")
             return user
 
         if requester.role == UserRole.TENANT_ADMIN:

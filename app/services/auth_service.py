@@ -345,7 +345,7 @@ class AuthService:
 
         if not user or not (user.is_active and not user.deleted_at):
             logger.warning("Token refresh failed: User not found, inactive, or deleted")
-            raise UnauthorizedException("User not found, inactive, or deleted")
+            raise UnauthorizedException("User not found or User account is inactive or deleted")
 
         access_token = create_access_token(
             user_id=user.id,

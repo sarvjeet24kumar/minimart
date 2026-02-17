@@ -26,6 +26,7 @@ class ShoppingListUpdate(NormalizedModel):
     name: str | None = Field(
         None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME
     )
+    deleted_at: datetime | None = None
 
 
 class MemberBrief(BaseModel):

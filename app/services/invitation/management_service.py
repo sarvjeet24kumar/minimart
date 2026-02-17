@@ -9,7 +9,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import selectinload
 
-from app.common.enums import InviteStatus, NotificationType, UserRole
+from app.common.enums import InviteStatus, UserRole
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import create_invitation_token
@@ -27,7 +27,6 @@ from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
 from app.services.email_service import EmailService
 from app.services.invitation.base import BaseInvitationService
-from app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
 
@@ -159,26 +158,6 @@ class InvitationManagementService(BaseInvitationService):
                 reject_url=reject_url,
             )
 
-        await self._broadcast(list_id, "invite_created", {
-            "invite_id": str(invite.id),
-            "invited_user_id": str(invitee.id),
-            "invited_email": invitee.email,
-            "invited_by": str(inviter.id),
-        }, exclude_user_id=inviter.id)
-
-        notification_service = NotificationService(self.db)
-        logger.info("Creating  invitation notification")
-        await notification_service.create_notification(
-            user_id=invitee.id,
-            notification_type=NotificationType.LIST_INVITE,
-            payload={
-                "invite_id": str(invite.id),
-                "list_name": shopping_list.name,
-                "inviter_username": inviter.username,
-            },
-            shopping_list_id=list_id,
-        )
-
         return expires_at
 
     async def cancel_invitation(
@@ -226,11 +205,6 @@ class InvitationManagementService(BaseInvitationService):
         await self.db.commit()
 
         logger.info("Invitation cancelled")
-
-        await self._broadcast(invite.shopping_list_id, "invite_cancelled", {
-            "invite_id": str(invite.id),
-            "invited_user_id": str(invite.invited_user_id),
-        })
 
     async def resend_invitation(
         self,
