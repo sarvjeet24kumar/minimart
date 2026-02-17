@@ -6,7 +6,7 @@ from math import ceil
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.enums import UserRole
@@ -15,6 +15,8 @@ from app.core.dependencies import (
     get_current_verified_user, 
     require_role,
 )
+from app.core.config import settings
+from app.core.rate_limit import RateLimit
 from app.db.session import get_db
 from app.exceptions import ForbiddenException
 from app.models.user import User
@@ -22,13 +24,14 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.user import UserAdminResponse, UserCreate, UserResponse, UserUpdate
 from app.services.user_service import UserService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="users"))])
 
 
 @router.post(
     "",
     response_model=UserAdminResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="users"))],
 )
 async def create_user(
     data: UserCreate,
@@ -124,6 +127,7 @@ async def get_user(
     "/{user_id}",
     response_model=UserAdminResponse | UserResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="users"))],
 )
 async def update_user(
     user_id: UUID,

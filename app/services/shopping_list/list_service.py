@@ -4,7 +4,7 @@ Shopping List Management Service
 
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import selectinload
 
 from app.common.constants import (
@@ -70,16 +70,24 @@ class ShoppingListService(BaseListService):
         return shopping_list
 
     async def get_user_lists(
-        self, user: User, skip: int = 0, limit: int = DEFAULT_PAGE_SIZE
+        self,
+        user: User,
+        skip: int = 0,
+        limit: int = DEFAULT_PAGE_SIZE,
+        include_archived: bool = False,
     ) -> tuple[list[ShoppingList], int]:
         """Get shopping lists visible to the user."""
         self._block_super_admin(user)
 
         if user.role == UserRole.TENANT_ADMIN:
+            filter_cond = [ShoppingList.tenant_id == user.tenant_id]
+            if not include_archived:
+                filter_cond.append(ShoppingList.deleted_at.is_(None))
+
             count_result = await self.db.execute(
                 select(func.count())
                 .select_from(ShoppingList)
-                .where(ShoppingList.tenant_id == user.tenant_id)
+                .where(and_(*filter_cond))
             )
             total = count_result.scalar_one()
 
@@ -89,7 +97,8 @@ class ShoppingListService(BaseListService):
                     selectinload(ShoppingList.items),
                     selectinload(ShoppingList.members),
                 )
-                .where(ShoppingList.tenant_id == user.tenant_id)
+                .where(and_(*filter_cond))
+                .order_by(ShoppingList.created_at.desc())
                 .offset(skip)
                 .limit(limit)
             )
@@ -97,7 +106,7 @@ class ShoppingListService(BaseListService):
 
             for shopping_list in shopping_lists:
                 admin_membership = next(
-                    (m for m in shopping_list.members if m.user_id == user.id), None
+                    (m for m in shopping_list.members if m.user_id == user.id and m.deleted_at is None), None
                 )
                 shopping_list.role = (
                     admin_membership.role.value
@@ -107,13 +116,25 @@ class ShoppingListService(BaseListService):
 
             return list(shopping_lists), total
         else:
+            # Regular users see their active memberships, or include archived ones
+            # For the count, we need to join with ShoppingList to check for its deleted_at as well
+            filter_cond = [ShoppingListMember.user_id == user.id]
+            if not include_archived:
+                filter_cond.append(ShoppingListMember.deleted_at.is_(None))
+                # Only show lists that are not deleted either
+                filter_cond.append(ShoppingList.deleted_at.is_(None))
+
             count_result = await self.db.execute(
-                select(func.count()).where(ShoppingListMember.user_id == user.id)
+                select(func.count())
+                .select_from(ShoppingListMember)
+                .join(ShoppingList, ShoppingList.id == ShoppingListMember.shopping_list_id)
+                .where(and_(*filter_cond))
             )
             total = count_result.scalar_one()
 
             result = await self.db.execute(
                 select(ShoppingListMember)
+                .join(ShoppingList, ShoppingList.id == ShoppingListMember.shopping_list_id)
                 .options(
                     selectinload(ShoppingListMember.shopping_list).selectinload(
                         ShoppingList.items
@@ -122,7 +143,8 @@ class ShoppingListService(BaseListService):
                         ShoppingList.members
                     ),
                 )
-                .where(ShoppingListMember.user_id == user.id)
+                .where(and_(*filter_cond))
+                .order_by(ShoppingListMember.joined_at.desc())
                 .offset(skip)
                 .limit(limit)
             )
@@ -139,18 +161,22 @@ class ShoppingListService(BaseListService):
     async def update_list(
         self, list_id: UUID, user: User, data: ShoppingListUpdate
     ) -> ShoppingList:
-        """Update a shopping list."""
+        """
+        Update a shopping list.
+        """
         shopping_list, _ = await self._get_list_with_access(
             list_id, user, require_owner_or_admin=True
         )
 
+        # 1. Action blocking for deleted lists
+        self._check_not_deleted(shopping_list)
+
+        # 2. Regular updates
         if data.name is not None:
             shopping_list.name = data.name
 
         await self.db.commit()
         await self.db.refresh(shopping_list)
-
-        logger.info("Shopping list updated")
 
         await self._publish_event(
             list_id,
@@ -173,6 +199,7 @@ class ShoppingListService(BaseListService):
         shopping_list, _ = await self._get_list_with_access(
             list_id, user, require_owner_or_admin=True
         )
+        self._check_not_deleted(shopping_list)
         shopping_list.deleted_at = func.now()
         await self.db.commit()
 

@@ -24,6 +24,7 @@ class MemberResponse(BaseModel):
     can_update_item: bool = False
     can_delete_item: bool = False
     joined_at: datetime
+    deleted_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

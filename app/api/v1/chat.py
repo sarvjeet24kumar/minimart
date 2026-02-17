@@ -6,17 +6,19 @@ from math import ceil
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import PaginationParams, get_current_verified_user
+from app.core.rate_limit import RateLimit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.chat import ChatMessageRequest, ChatMessageResponse
 from app.schemas.common import PaginatedResponse
 from app.services.chat_service import ChatService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="chat"))])
 
 
 @router.get(
@@ -52,6 +54,7 @@ async def get_chat_messages(
     "/{list_id}/messages",
     response_model=ChatMessageResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="chat"))],
 )
 async def send_chat_message(
     list_id: UUID,

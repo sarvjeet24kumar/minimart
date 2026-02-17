@@ -10,7 +10,9 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.enums import UserRole
+from app.core.config import settings
 from app.core.dependencies import PaginationParams, require_role
+from app.core.rate_limit import RateLimit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
@@ -22,13 +24,14 @@ from app.schemas.tenant import (
 )
 from app.services.tenant_service import TenantService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="tenants"))])
 
 
 @router.post(
     "",
     response_model=TenantResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API))],
 )
 async def create_tenant(
     data: TenantCreate,

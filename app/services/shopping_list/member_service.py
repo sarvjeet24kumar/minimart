@@ -27,20 +27,29 @@ class ListMemberService(BaseListService):
     """Handles membership and permission operations."""
 
     async def get_members(
-        self, list_id: UUID, user: User, skip: int = 0, limit: int = DEFAULT_PAGE_SIZE
+        self,
+        list_id: UUID,
+        user: User,
+        skip: int = 0,
+        limit: int = DEFAULT_PAGE_SIZE,
+        include_deleted: bool = False,
     ) -> tuple[list[ShoppingListMember], int]:
         """Get all members of a shopping list."""
         await self._get_list_with_access(list_id, user)
 
+        filter_cond = [ShoppingListMember.shopping_list_id == list_id]
+        if not include_deleted:
+            filter_cond.append(ShoppingListMember.deleted_at.is_(None))
+
         count_result = await self.db.execute(
-            select(func.count()).where(ShoppingListMember.shopping_list_id == list_id)
+            select(func.count()).where(and_(*filter_cond))
         )
         total = count_result.scalar_one()
 
         result = await self.db.execute(
             select(ShoppingListMember)
             .options(selectinload(ShoppingListMember.user))
-            .where(ShoppingListMember.shopping_list_id == list_id)
+            .where(and_(*filter_cond))
             .offset(skip)
             .limit(limit)
         )
@@ -68,6 +77,7 @@ class ListMemberService(BaseListService):
         shopping_list, _ = await self._get_list_with_access(
             list_id, user, require_owner_or_admin=True
         )
+        self._check_not_deleted(shopping_list)
 
         if member_user_id == shopping_list.owner_id:
             raise ForbiddenException("Cannot remove the owner from the list")
@@ -82,10 +92,10 @@ class ListMemberService(BaseListService):
         )
         membership = result.scalar_one_or_none()
 
-        if not membership:
+        if not membership or membership.deleted_at:
             raise NotFoundException("Member not found")
 
-        await self.db.delete(membership)
+        membership.deleted_at = func.now()
         await self.db.commit()
 
         logger.info("Member removed from list")
@@ -100,44 +110,6 @@ class ListMemberService(BaseListService):
 
         return True
 
-    async def leave_list(self, list_id: UUID, user: User) -> bool:
-        """Leave a shopping list."""
-        shopping_list, _ = await self._get_list_with_access(list_id, user)
-
-        if shopping_list.owner_id == user.id:
-            raise ForbiddenException("Owner cannot leave their own list")
-
-        result = await self.db.execute(
-            select(ShoppingListMember).where(
-                and_(
-                    ShoppingListMember.shopping_list_id == list_id,
-                    ShoppingListMember.user_id == user.id,
-                )
-            )
-        )
-        membership = result.scalar_one_or_none()
-
-        if membership:
-            await self.db.delete(membership)
-            await self.db.commit()
-
-            logger.info("User left list")
-
-            await self._publish_event(list_id, WS_EVENT_MEMBER_LEFT, {"user_id": str(user.id)})
-
-            notification_service = NotificationService(self.db)
-            await notification_service.notify_list_members(
-                list_id=list_id,
-                notification_type=NotificationType.LIST_UPDATED,
-                payload={
-                    "username": user.username,
-                    "event": "member_left",
-                    "list_name": shopping_list.name,
-                },
-                exclude_user_id=user.id,
-            )
-
-        return True
 
     async def update_member_permissions(
         self,
@@ -150,6 +122,7 @@ class ListMemberService(BaseListService):
         shopping_list, _ = await self._get_list_with_access(
             list_id, user, require_owner_or_admin=True
         )
+        self._check_not_deleted(shopping_list)
 
         if member_user_id == shopping_list.owner_id:
             raise ForbiddenException("Cannot modify the owner's permissions")

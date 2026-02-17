@@ -6,11 +6,13 @@ from math import ceil
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.enums import ItemStatus
+from app.core.config import settings
 from app.core.dependencies import PaginationParams, get_current_verified_user
+from app.core.rate_limit import RateLimit
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
@@ -20,13 +22,14 @@ from app.services.shopping_list import ListItemService
 
 logger = get_logger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="items"))])
 
 
 @router.post(
     "/{list_id}/items",
     response_model=ItemResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="items"))],
 )
 async def add_item(
     list_id: UUID,
@@ -92,6 +95,7 @@ async def get_item(
     "/{list_id}/items/{item_id}",
     response_model=ItemResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="items"))],
 )
 async def update_item(
     list_id: UUID,

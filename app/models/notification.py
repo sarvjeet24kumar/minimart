@@ -24,7 +24,6 @@ class Notification(BaseModel):
 
     __tablename__ = "notifications"
     __table_args__ = (
-        Index("idx_notifications_user_id", "user_id"),
         Index("idx_notifications_user_unread", "user_id", "is_read"),
         Index("idx_notifications_created_at", "user_id", "created_at"),
         Index("idx_notifications_type", "user_id", "type"),
@@ -34,6 +33,7 @@ class Notification(BaseModel):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     shopping_list_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

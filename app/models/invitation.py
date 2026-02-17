@@ -27,33 +27,33 @@ class ShoppingListInvite(BaseModel):
 
     __tablename__ = "shopping_list_invites"
     __table_args__ = (
-        Index("idx_invites_list_id", "shopping_list_id"),
-        Index("idx_invites_invited_user_id", "invited_user_id"),
-        Index("idx_invites_invited_by_user_id", "invited_by_user_id"),
-        Index("idx_invites_status", "status"),
-        Index("idx_invites_token", "token", unique=True),
+        # Composite indexes or specialized constraints go here
     )
 
     shopping_list_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("shopping_lists.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     invited_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     invited_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     token: Mapped[str] = mapped_column(String(MAX_LENGTH_TOKEN), unique=True, nullable=False)
     status: Mapped[InviteStatus] = mapped_column(
         ENUM(InviteStatus, name="invite_status", create_type=True),
         default=InviteStatus.PENDING,
         nullable=False,
+        index=True,
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

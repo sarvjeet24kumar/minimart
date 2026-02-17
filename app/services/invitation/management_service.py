@@ -55,6 +55,9 @@ class InvitationManagementService(BaseInvitationService):
             logger.warning("Shopping list not found for invitation")
             raise NotFoundException("Shopping list not found")
 
+        if shopping_list.deleted_at:
+            raise ForbiddenException("This list is deleted. No new invitations can be sent.")
+
         if shopping_list.tenant_id != inviter.tenant_id:
             logger.warning("Cross-tenant invitation access denied")
             raise ForbiddenException("Cross-tenant access denied")
@@ -199,6 +202,9 @@ class InvitationManagementService(BaseInvitationService):
 
         shopping_list = invite.shopping_list
 
+        if shopping_list.deleted_at:
+            raise ForbiddenException("This list is deleted. Invitations cannot be modified.")
+
         if shopping_list.tenant_id != user.tenant_id:
             logger.warning("Cross-tenant cancellation access denied")
             raise ForbiddenException("Cross-tenant access denied")
@@ -252,6 +258,9 @@ class InvitationManagementService(BaseInvitationService):
             raise NotFoundException("Invitation not found")
 
         shopping_list = invite.shopping_list
+
+        if shopping_list.deleted_at:
+            raise ForbiddenException("This list is deleted. Invitations cannot be resent.")
 
         if shopping_list.tenant_id != user.tenant_id:
             logger.warning("Cross-tenant resend access denied")

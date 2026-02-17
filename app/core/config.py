@@ -59,9 +59,16 @@ class Settings(BaseSettings):
     OTP_LENGTH: int
 
     # Rate Limiting (Keeping these as defaults is standard as they are usually static)
+    # Rate Limiting Thresholds
     RATE_LIMIT_AUTH: str = "5/minute"
-    RATE_LIMIT_INVITATION: str = "10/hour"
-    RATE_LIMIT_API: str = "100/minute"
+    RATE_LIMIT_API: str = "30/minute"
+    RATE_LIMIT_DEFAULT: str = "1000/minute"
+    
+    # Data Retention
+    USER_UNVERIFIED_RETENTION_HOURS: int
+    USER_DATA_RETENTION_DAYS: int
+    TENANT_RETENTION_DAYS: int
+
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]

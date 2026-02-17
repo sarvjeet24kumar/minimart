@@ -65,7 +65,7 @@ class ShoppingList(BaseModel):
         back_populates="shopping_list",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="Item.created_at",
+        order_by="desc(Item.created_at)",
     )
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
@@ -105,7 +105,9 @@ class ShoppingList(BaseModel):
 
     @property
     def member_count(self) -> int:
-        return len(self.members) if self.members else 0
+        if not self.members:
+            return 0
+        return sum(1 for m in self.members if m.deleted_at is None)
 
     # This will be manually attached by the service for summary responses
     @property

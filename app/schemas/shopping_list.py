@@ -13,6 +13,7 @@ from app.schemas.common import NormalizedModel
 
 from app.common.constants import MAX_LENGTH_NAME, MIN_LENGTH_NAME
 
+
 class ShoppingListCreate(NormalizedModel):
     """Shopping list creation schema."""
 
@@ -22,7 +23,9 @@ class ShoppingListCreate(NormalizedModel):
 class ShoppingListUpdate(NormalizedModel):
     """Shopping list update schema."""
 
-    name: str | None = Field(None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME)
+    name: str | None = Field(
+        None, min_length=MIN_LENGTH_NAME, max_length=MAX_LENGTH_NAME
+    )
 
 
 class MemberBrief(BaseModel):
@@ -31,7 +34,6 @@ class MemberBrief(BaseModel):
     user_id: UUID
     username: str
     role: MemberRole
-    joined_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,7 +46,6 @@ class ShoppingListResponse(NormalizedModel):
     tenant_id: UUID
     owner_id: UUID
     created_at: datetime
-    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,7 +58,6 @@ class ItemBrief(BaseModel):
     quantity: int
     status: ItemStatus
     added_by: UUID | None
-    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,6 +65,7 @@ class ItemBrief(BaseModel):
 class ShoppingListDetailResponse(ShoppingListResponse):
     """Detailed shopping list response with members and items."""
 
+    deleted_at: datetime | None = None
     members: list[MemberBrief] = []
     items: list[ItemBrief] = []
     item_count: int = 0
@@ -81,5 +82,6 @@ class ShoppingListSummaryResponse(BaseModel):
     item_count: int
     member_count: int
     created_at: datetime
+    deleted_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

@@ -10,7 +10,9 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import PaginationParams, get_current_verified_user
+from app.core.rate_limit import RateLimit
 from app.db.session import get_db
 from app.exceptions import NotFoundException
 from app.models.notification import Notification
@@ -19,7 +21,7 @@ from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.notification import NotificationResponse
 from app.services.notification_service import NotificationService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="notifications"))])
 
 
 @router.get(

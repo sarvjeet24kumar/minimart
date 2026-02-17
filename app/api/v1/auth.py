@@ -6,12 +6,13 @@ Authentication Endpoints
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.dependencies import get_current_user, get_tenant_id
+from app.core.rate_limit import RateLimit
 from app.db.session import get_db
 from app.exceptions import ValidationException
 from app.models.user import User
@@ -31,7 +32,7 @@ from app.schemas.common import MessageResponse
 from app.schemas.user import ChangePasswordRequest
 from app.services.auth_service import AuthService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_AUTH, scope="auth"))])
 security = HTTPBearer(auto_error=True)
 
 

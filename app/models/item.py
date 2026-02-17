@@ -26,8 +26,9 @@ class Item(BaseModel):
     __tablename__ = "items"
     __table_args__ = (
         CheckConstraint(f"quantity >= {MIN_ITEM_QUANTITY}", name="check_quantity_positive"),
-        Index("idx_items_shopping_list", "shopping_list_id"),
+        Index("idx_items_shopping_list_id", "shopping_list_id"),
         Index("idx_items_added_by", "added_by"),
+        Index("idx_items_created_at", "created_at"),
     )
 
     shopping_list_id: Mapped[uuid.UUID] = mapped_column(

@@ -9,8 +9,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import PaginationParams, get_current_verified_user
 from app.core.logging import get_logger
+from app.core.rate_limit import RateLimit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import MessageResponse, PaginatedResponse
@@ -29,12 +31,13 @@ from app.services.shopping_list import ListMemberService, ShoppingListService
 
 logger = get_logger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="lists"))])
 
 @router.post(
     "",
     response_model=ShoppingListResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="lists"))],
 )
 async def create_shopping_list(
     data: ShoppingListCreate,
@@ -57,13 +60,17 @@ async def list_shopping_lists(
     current_user: Annotated[User, Depends(get_current_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
+    include_archived: bool = False,
 ):
     """
     Get all shopping lists visible to the user.
     """
     list_service = ShoppingListService(db)
     items, total = await list_service.get_user_lists(
-        current_user, skip=pagination.skip, limit=pagination.size
+        current_user,
+        skip=pagination.skip,
+        limit=pagination.size,
+        include_archived=include_archived,
     )
     
     return PaginatedResponse(
@@ -95,6 +102,7 @@ async def get_shopping_list(
     "/{list_id}",
     response_model=ShoppingListResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="lists"))],
 )
 async def update_shopping_list(
     list_id: UUID,
@@ -109,7 +117,11 @@ async def update_shopping_list(
     return await list_service.update_list(list_id, current_user, data)
 
 
-@router.delete("/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{list_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="lists"))],
+)
 async def delete_shopping_list(
     list_id: UUID,
     current_user: Annotated[User, Depends(get_current_verified_user)],
@@ -132,13 +144,18 @@ async def list_members(
     current_user: Annotated[User, Depends(get_current_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
+    include_deleted: bool = False,
 ):
     """
     Get all members of a shopping list.
     """
     member_service = ListMemberService(db)
     items, total = await member_service.get_members(
-        list_id, current_user, skip=pagination.skip, limit=pagination.size
+        list_id,
+        current_user,
+        skip=pagination.skip,
+        limit=pagination.size,
+        include_deleted=include_deleted,
     )
     
     return PaginatedResponse(

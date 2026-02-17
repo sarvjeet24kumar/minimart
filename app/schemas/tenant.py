@@ -55,8 +55,11 @@ class TenantResponse(NormalizedModel):
 
 
 class TenantDetailResponse(TenantResponse):
-    """Detailed tenant response with status fields."""
+    """Detailed tenant response with status fields and counts."""
 
     is_active: bool
     updated_at: datetime
     deleted_at: datetime | None = None
+    total_users: int = 0
+    total_lists: int = 0
+    total_items: int = 0

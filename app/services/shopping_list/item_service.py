@@ -30,6 +30,7 @@ class ListItemService(BaseListService):
     async def add_item(self, list_id: UUID, user: User, data: ItemCreate) -> Item:
         """Add an item to a shopping list."""
         shopping_list, membership = await self._get_list_with_access(list_id, user)
+        self._check_not_deleted(shopping_list)
         self._check_item_permission(user, membership, "can_add_item")
 
         # Check for duplicate pending item with same name (case-insensitive or exact as per DB collation)
@@ -149,6 +150,7 @@ class ListItemService(BaseListService):
         shopping_list, membership = await self._get_list_with_access(
             item.shopping_list_id, user
         )
+        self._check_not_deleted(shopping_list)
         self._check_item_permission(user, membership, "can_update_item")
 
         if item.status == ItemStatus.PURCHASED:
@@ -214,6 +216,7 @@ class ListItemService(BaseListService):
 
         list_id = item.shopping_list_id
         shopping_list, membership = await self._get_list_with_access(list_id, user)
+        self._check_not_deleted(shopping_list)
         self._check_item_permission(user, membership, "can_delete_item")
 
         from app.core.time import get_now

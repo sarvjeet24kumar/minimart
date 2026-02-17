@@ -83,6 +83,9 @@ class InvitationActionService(BaseInvitationService):
             logger.warning("Shopping list not found for invitation acceptance")
             raise NotFoundException("Shopping list no longer exists")
 
+        if shopping_list.deleted_at:
+            raise ForbiddenException("This list is deleted. You cannot join it.")
+
         result = await self.db.execute(
             select(ShoppingListMember).where(
                 and_(

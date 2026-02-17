@@ -7,10 +7,12 @@ from math import ceil
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import PaginationParams, get_current_verified_user
+from app.core.rate_limit import RateLimit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import MessageResponse, PaginatedResponse
@@ -26,8 +28,8 @@ from app.services.invitation import (
     InvitationManagementService,
 )
 
-router = APIRouter()
-list_router = APIRouter()
+router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API))])
+list_router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API, scope="invitations"))])
 
 
 @router.post(

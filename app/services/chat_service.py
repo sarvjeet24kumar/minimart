@@ -81,6 +81,14 @@ class ChatService:
         if not content or not content.strip():
             raise ValidationException("Message content cannot be empty")
 
+        # Check if list is deleted
+        result = await self.db.execute(
+            select(ShoppingList).where(ShoppingList.id == list_id)
+        )
+        shopping_list = result.scalar_one_or_none()
+        if shopping_list and shopping_list.deleted_at:
+            raise ForbiddenException("This list is deleted. Chat is in read-only mode.")
+
         await self._verify_membership(list_id, user)
 
         message = ChatMessage(
@@ -175,6 +183,13 @@ class ChatService:
         Soft-delete a chat message.
         Only the sender or list owner can delete.
         """
+        result = await self.db.execute(
+            select(ShoppingList).where(ShoppingList.id == list_id)
+        )
+        shopping_list = result.scalar_one_or_none()
+        if shopping_list and shopping_list.deleted_at:
+            raise ForbiddenException("This list is deleted. Chat is in read-only mode.")
+
         await self._verify_membership(list_id, user)
 
         result = await self.db.execute(
