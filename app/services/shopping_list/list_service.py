@@ -168,10 +168,8 @@ class ShoppingListService(BaseListService):
             list_id, user, require_owner_or_admin=True
         )
 
-        # 1. Action blocking for deleted lists
         self._check_not_deleted(shopping_list)
 
-        # 2. Regular updates
         if data.name is not None:
             shopping_list.name = data.name
 

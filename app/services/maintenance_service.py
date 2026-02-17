@@ -1,7 +1,5 @@
 """
 Maintenance Service
-
-Handles database cleanup and data retention policies.
 """
 
 from datetime import timedelta
@@ -36,7 +34,6 @@ class MaintenanceService:
         """
         threshold = get_now() - timedelta(hours=settings.USER_UNVERIFIED_RETENTION_HOURS)
         
-        # Select users to delete for logging purposes
         stmt = select(User).where(
             and_(
                 User.is_email_verified == False,
@@ -48,7 +45,6 @@ class MaintenanceService:
         count = len(users)
 
         if count > 0:
-            # Delete accounts. Cascades will handle memberships, etc.
             delete_stmt = delete(User).where(
                 and_(
                     User.is_email_verified == False,
@@ -68,7 +64,6 @@ class MaintenanceService:
         """
         threshold = get_now() - timedelta(days=settings.USER_DATA_RETENTION_DAYS)
         
-        # Find users who were soft-deleted before the threshold
         stmt = select(User).where(
             and_(
                 User.deleted_at.is_not(None),
@@ -80,23 +75,15 @@ class MaintenanceService:
         
         total_wiped = 0
         for user in users:
-            # Wipe their data
-            # 1. Delete lists they own (this will cascade to items and members if set up)
-            # Actually, let's be explicit to ensure everything is cleared.
             
-            # Delete owned lists (cascades to items/members)
             await self.db.execute(delete(ShoppingList).where(ShoppingList.owner_id == user.id))
             
-            # Delete items they added (in lists they don't own)
             await self.db.execute(delete(Item).where(Item.added_by == user.id))
             
-            # Delete their chat messages
             await self.db.execute(delete(ChatMessage).where(ChatMessage.sender_id == user.id))
             
-            # Delete their notifications
             await self.db.execute(delete(Notification).where(Notification.user_id == user.id))
             
-            # Delete memberships in other lists
             await self.db.execute(delete(ShoppingListMember).where(ShoppingListMember.user_id == user.id))
 
             total_wiped += 1
@@ -124,7 +111,6 @@ class MaintenanceService:
         count = len(tenants)
 
         if count > 0:
-            # Delete tenants. Cascade will handle users, lists, etc.
             delete_stmt = delete(Tenant).where(
                 and_(
                     Tenant.deleted_at.is_not(None),

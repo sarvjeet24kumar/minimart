@@ -5,7 +5,6 @@ Sets up the Celery application and defines the background task schedule.
 """
 
 from celery import Celery
-from celery.schedules import crontab
 from datetime import timedelta
 from app.core.config import settings
 

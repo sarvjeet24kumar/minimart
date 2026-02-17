@@ -24,38 +24,24 @@ class MockLimit:
 class RateLimit:
     """
     Dependency-based rate limiting with granular endpoint isolation.
-    Allows applying limits without adding 'request: Request' to the endpoint signature.
-    
-    Usage:
-        @router.get("/", dependencies=[Depends(RateLimit("5/minute", scope="auth"))])
+
     """
     def __init__(self, limit_str: str, scope: str = "default"):
         self.limit_str = limit_str
         self.scope = scope
 
     async def __call__(self, request: Request):
-        # We manually trigger the limiter's check logic
-        # This bypasses the decorator's requirement for the argument in the signature
-        
-        # Parse the limit string into RateLimitItem objects
-        # parse_many returns a list of items
         items = parse_many(self.limit_str)
         if not items:
             return
 
-        # Get the identifier for the request (IP address)
         ip = get_remote_address(request)
         
-        # We include the route path to ensure endpoints don't block each other.
-        # We try to use the path template (e.g. /users/{user_id}) if available.
         route = request.scope.get("route")
         endpoint_id = route.path if route and hasattr(route, "path") else request.url.path
         
         key = f"{self.scope}:{endpoint_id}:{ip}"
 
-        # Check each limit item using the internal limiter object
         for item in items:
             if not limiter._limiter.hit(item, key):
-                 # Raise RateLimitExceeded using a mock Limit object to satisfy
-                 # version-specific constructor requirements (needs .error_message and .limit)
-                 raise RateLimitExceeded(MockLimit(item))
+                raise RateLimitExceeded(MockLimit(item))

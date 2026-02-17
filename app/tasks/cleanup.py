@@ -10,6 +10,7 @@ from app.core.celery import celery_app
 from app.core.logging import get_logger
 from app.db.session import AsyncSessionLocal
 from app.services.invitation import InvitationMaintenanceService
+from app.db.database import engine
 
 logger = get_logger(__name__)
 
@@ -19,7 +20,7 @@ def expire_invites():
     Background task to mark stale invitations as expired.
     """
     async def run_cleanup():
-        from app.db.database import engine
+        
         async with AsyncSessionLocal() as db:
             service = InvitationMaintenanceService(db)
             try:
@@ -43,17 +44,13 @@ def cleanup_maintenance():
     from app.services.maintenance_service import MaintenanceService
     
     async def run_maintenance():
-        from app.db.database import engine
         async with AsyncSessionLocal() as db:
             service = MaintenanceService(db)
             try:
-                # 1. Clear unverified users
                 unverified_count = await service.hard_delete_unverified_users()
                 
-                # 2. Erase data for old soft-deleted users
                 user_data_count = await service.erase_deleted_user_data()
                 
-                # 3. Clear expired tenants
                 tenant_count = await service.hard_delete_expired_tenants()
                 
                 logger.info(

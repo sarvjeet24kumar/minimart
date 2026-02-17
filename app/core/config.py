@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     OTP_EXPIRE_MINUTES: int
     OTP_LENGTH: int
 
-    # Rate Limiting (Keeping these as defaults is standard as they are usually static)
+
     # Rate Limiting Thresholds
     RATE_LIMIT_AUTH: str = "5/minute"
     RATE_LIMIT_API: str = "30/minute"

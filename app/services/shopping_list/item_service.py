@@ -33,8 +33,6 @@ class ListItemService(BaseListService):
         self._check_not_deleted(shopping_list)
         self._check_item_permission(user, membership, "can_add_item")
 
-        # Check for duplicate pending item with same name (case-insensitive or exact as per DB collation)
-        # Usually it's better to be case-insensitive for item names, but let's stick to exact match first if not specified.
         result = await self.db.execute(
             select(Item).where(
                 and_(

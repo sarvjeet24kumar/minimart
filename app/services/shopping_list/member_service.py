@@ -148,7 +148,6 @@ class ListMemberService(BaseListService):
 
         await self.db.commit()
 
-        # Re-fetch with selectinload to avoid DetachedInstanceError/MissingGreenlet during serialization
         result = await self.db.execute(
             select(ShoppingListMember)
             .options(selectinload(ShoppingListMember.user))
