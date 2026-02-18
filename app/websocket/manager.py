@@ -12,7 +12,11 @@ from fastapi import WebSocket
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.constants import WS_EVENT_MEMBER_LEFT, WS_EVENT_MEMBER_REMOVED
+from app.common.enums import UserRole
+from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
+from app.models.user import User
 
 
 class ConnectionManager:
@@ -55,19 +59,30 @@ class ConnectionManager:
     ) -> bool:
         """
         Subscribe a specific connection (or all user's connections if websocket is None) to a list.
+        Tenant Admins can subscribe to any list within their tenant without membership.
         """
-        result = await db.execute(
-            select(ShoppingListMember).where(
-                and_(
-                    ShoppingListMember.shopping_list_id == UUID(list_id),
-                    ShoppingListMember.user_id == UUID(user_id),
-                    ShoppingListMember.deleted_at.is_(None),
+        # Check if user is a Tenant Admin in the same tenant as the list
+        user_result = await db.execute(select(User).where(User.id == UUID(user_id)))
+        user = user_result.scalar_one_or_none()
+
+        if user and user.role == UserRole.TENANT_ADMIN:
+            list_result = await db.execute(select(ShoppingList).where(ShoppingList.id == UUID(list_id)))
+            shopping_list = list_result.scalar_one_or_none()
+            if not shopping_list or shopping_list.tenant_id != user.tenant_id:
+                return False
+        else:
+            result = await db.execute(
+                select(ShoppingListMember).where(
+                    and_(
+                        ShoppingListMember.shopping_list_id == UUID(list_id),
+                        ShoppingListMember.user_id == UUID(user_id),
+                        ShoppingListMember.deleted_at.is_(None),
+                    )
                 )
             )
-        )
-        membership = result.scalar_one_or_none()
-        if not membership:
-            return False
+            membership = result.scalar_one_or_none()
+            if not membership:
+                return False
 
         # Determine which connections to subscribe
         target_sockets = [websocket] if websocket else list(self.active_connections.get(user_id, {}).keys())
@@ -142,16 +157,6 @@ class ConnectionManager:
                 return True
         return False
 
-    def is_user_watching_list(self, user_id: str, list_id: str) -> bool:
-        """Check if a user is actively watching a list (scoped connection)."""
-        if user_id not in self.active_connections:
-            return False
-        
-        for ws, scope in self.active_connections[user_id].items():
-            if scope == list_id or (scope and scope.startswith(f"chat:{list_id}")):
-                return True
-        return False
-                
     async def broadcast_event(
         self, 
         list_id: str, 
@@ -162,7 +167,7 @@ class ConnectionManager:
         target_scope: str | None = None
     ) -> None:
         """Broadcast a structured event to all list subscribers."""
-        if event_type == "member_removed" or event_type == "member_left":
+        if event_type == WS_EVENT_MEMBER_REMOVED or event_type == WS_EVENT_MEMBER_LEFT:
             removed_user_id = str(data.get("user_id"))
             if removed_user_id:
                 await self.kick_user_from_list(removed_user_id, list_id, event_type)

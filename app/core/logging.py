@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import sys
 from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler

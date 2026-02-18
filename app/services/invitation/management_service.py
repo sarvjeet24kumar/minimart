@@ -9,7 +9,8 @@ from fastapi import BackgroundTasks
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import selectinload
 
-from app.common.enums import InviteStatus, UserRole
+from app.common.constants import DEFAULT_PAGE_SIZE
+from app.common.enums import InviteStatus, NotificationType, UserRole
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import create_invitation_token
@@ -27,6 +28,7 @@ from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
 from app.services.email_service import EmailService
 from app.services.invitation.base import BaseInvitationService
+from app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
 
@@ -84,6 +86,10 @@ class InvitationManagementService(BaseInvitationService):
         if not invitee.is_active:
             logger.warning("Attempted to invite inactive user")
             raise ValidationException("Cannot invite inactive user")
+
+        if not invitee.is_email_verified:
+            logger.warning("Attempted to invite unverified user")
+            raise ValidationException("Cannot invite a user whose email is not verified")
 
         result = await self.db.execute(
             select(ShoppingListMember).where(
@@ -157,6 +163,19 @@ class InvitationManagementService(BaseInvitationService):
                 accept_url=accept_url,
                 reject_url=reject_url,
             )
+
+        # Notify existing list members about the invitation
+        notification_service = NotificationService(self.db)
+        await notification_service.notify_list_members(
+            list_id=list_id,
+            notification_type=NotificationType.LIST_INVITE,
+            payload={
+                "invited_user": invitee.username,
+                "invited_by": inviter.username,
+                "list_name": shopping_list.name,
+            },
+            exclude_user_id=inviter.id,
+        )
 
         return expires_at
 
@@ -299,7 +318,7 @@ class InvitationManagementService(BaseInvitationService):
         user: User,
         status_filter: str | None = None,
         skip: int = 0,
-        limit: int = 20,
+        limit: int = DEFAULT_PAGE_SIZE,
     ) -> tuple[list[ShoppingListInvite], int]:
         """Get invitations for a specific list."""
         if user.role == UserRole.SUPER_ADMIN:
@@ -347,7 +366,7 @@ class InvitationManagementService(BaseInvitationService):
         user: User,
         status_filter: str | None = None,
         skip: int = 0,
-        limit: int = 20,
+        limit: int = DEFAULT_PAGE_SIZE,
     ) -> tuple[list[ShoppingListInvite], int]:
         """Get invitations sent to the current user."""
         self._block_super_admin(user)

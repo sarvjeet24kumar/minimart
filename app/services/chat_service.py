@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.constants import (
+    DEFAULT_PAGE_SIZE,
     WS_EVENT_CHAT_MESSAGE,
 )
 from app.common.enums import UserRole
@@ -108,7 +109,7 @@ class ChatService:
         broadcast_payload = {
             "id": str(message.id),
             "type": WS_EVENT_CHAT_MESSAGE,
-            "list_id": str(list_id),
+            "shopping_list_id": str(list_id),
             "sender_id": str(user.id),
             "sender_name": user.username,
             "message": message.content,
@@ -128,7 +129,7 @@ class ChatService:
         self,
         list_id: UUID,
         user: User,
-        limit: int = 50,
+        limit: int = DEFAULT_PAGE_SIZE,
         skip: int = 0,
     ) -> tuple[list[dict[str, Any]], int]:
         """

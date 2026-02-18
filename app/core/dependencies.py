@@ -11,6 +11,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.common.enums import MemberRole, UserRole
 from app.core.security import decode_token
 from app.db.session import get_db
@@ -37,7 +38,7 @@ security = HTTPBearer(auto_error=True)
 class PaginationParams:
     """Dependency for normalized pagination parameters."""
 
-    def __init__(self, page: int = Query(1, ge=1), size: int = Query(10, ge=1, le=100)):
+    def __init__(self, page: int = Query(DEFAULT_PAGE, ge=DEFAULT_PAGE), size: int = Query(DEFAULT_PAGE_SIZE, ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE)):
         self.page = page
         self.size = size
         self.skip = (self.page - 1) * self.size

@@ -9,8 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from app.common.constants import (
     DEFAULT_PAGE_SIZE,
+    WS_EVENT_MEMBER_REMOVED,
 )
-from app.common.enums import UserRole
 from app.core.logging import get_logger
 from app.exceptions import ForbiddenException, NotFoundException
 from app.models.shopping_list_member import ShoppingListMember
@@ -86,7 +86,7 @@ class ListMemberService(BaseListService):
         logger.info("Member removed from list")
 
         await manager.kick_user_from_list(
-            str(member_user_id), str(list_id), "member_removed"
+            str(member_user_id), str(list_id), WS_EVENT_MEMBER_REMOVED
         )
 
         return True

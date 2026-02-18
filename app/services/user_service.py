@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.common.constants import DEFAULT_PAGE_SIZE
 from app.common.enums import UserRole
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -155,7 +156,7 @@ class UserService:
         requester: User,
         tenant_id: UUID | None = None,
         skip: int = 0,
-        limit: int = 100,
+        limit: int = DEFAULT_PAGE_SIZE,
     ) -> tuple[list[User], int]:
         """
         Get users based on requester context.
@@ -240,9 +241,9 @@ class UserService:
         if requester.role == UserRole.USER:
             if requester.id != user.id:
                 raise ForbiddenException("Users are not allowed to deactivate other accounts")
-            # Users ARE allowed to deactivate their own account
+
         else:
-            # Admins (Tenant/Super) shouldn't deactivate their own accounts to prevent lockouts
+
             if requester.id == user.id:
                 raise ForbiddenException("Admins cannot deactivate their own account")
 

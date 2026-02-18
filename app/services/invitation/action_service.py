@@ -7,7 +7,7 @@ from uuid import UUID
 from jose import JWTError
 from sqlalchemy import and_, select
 
-from app.common.enums import InviteStatus, MemberRole
+from app.common.enums import InviteStatus, MemberRole, NotificationType
 from app.core.logging import get_logger
 from app.core.security import decode_invitation_token
 from app.core.time import get_now
@@ -23,6 +23,7 @@ from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
 from app.services.invitation.base import BaseInvitationService
+from app.services.notification_service import NotificationService
 
 
 logger = get_logger(__name__)
@@ -112,6 +113,18 @@ class InvitationActionService(BaseInvitationService):
         
         logger.info("Invitation accepted successfully")
 
+        # Notify existing list members about the new member
+        notification_service = NotificationService(self.db)
+        await notification_service.notify_list_members(
+            list_id=list_id,
+            notification_type=NotificationType.INVITE_ACCEPTED,
+            payload={
+                "user": user.username,
+                "list_name": shopping_list.name,
+            },
+            exclude_user_id=user.id,
+        )
+
         await self.db.refresh(shopping_list)
         return shopping_list
 
@@ -144,5 +157,22 @@ class InvitationActionService(BaseInvitationService):
         await self.db.commit()
         
         logger.info("Invitation rejected")
+
+        # Notify existing list members about the rejection
+        result = await self.db.execute(
+            select(ShoppingList).where(ShoppingList.id == invite.shopping_list_id)
+        )
+        shopping_list = result.scalar_one_or_none()
+        if shopping_list:
+            notification_service = NotificationService(self.db)
+            await notification_service.notify_list_members(
+                list_id=invite.shopping_list_id,
+                notification_type=NotificationType.INVITE_REJECTED,
+                payload={
+                    "user": user.username,
+                    "list_name": shopping_list.name,
+                },
+                exclude_user_id=user.id,
+            )
 
         return True

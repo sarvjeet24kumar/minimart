@@ -12,6 +12,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.constants import WS_CLOSE_AUTH_FAILED, WS_CLOSE_FORBIDDEN
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import get_db
@@ -47,13 +48,13 @@ async def websocket_endpoint(
     try:
         payload = decode_token(token)
         if payload.get("type") != "access":
-            await websocket.close(code=4001, reason="Invalid token type")
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Invalid token type")
             return
         
         # Check if token is blacklisted (logout)
         token_id = payload.get("jti")
         if token_id and await RedisService.is_access_token_blacklisted(token_id):
-            await websocket.close(code=4001, reason="Token revoked")
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Token revoked")
             return
 
         user_id = payload.get("sub")
@@ -63,11 +64,11 @@ async def websocket_endpoint(
         user = result.scalar_one_or_none()
         
         if not user or not (user.is_active and not user.deleted_at):
-            await websocket.close(code=4001, reason="User not found, inactive, or deleted")
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="User not found, inactive, or deleted")
             return
         
     except JWTError as e:
-        await websocket.close(code=4001, reason=f"Invalid token: {str(e)}")
+        await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason=f"Invalid token: {str(e)}")
         return
     
     # Connect with "global" scope
@@ -103,13 +104,13 @@ async def chat_websocket_endpoint(
     try:
         payload = decode_token(token)
         if payload.get("type") != "access":
-            await websocket.close(code=4001, reason="Invalid token type")
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Invalid token type")
             return
 
         # Check if token is blacklisted (logout)
         token_id = payload.get("jti")
         if token_id and await RedisService.is_access_token_blacklisted(token_id):
-            await websocket.close(code=4001, reason="Token revoked")
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Token revoked")
             return
 
         user_id = payload.get("sub")
@@ -119,18 +120,18 @@ async def chat_websocket_endpoint(
         user = result.scalar_one_or_none()
 
         if not user or not (user.is_active and not user.deleted_at):
-            await websocket.close(code=4001, reason="User not found, inactive, or deleted")
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="User not found, inactive, or deleted")
             return
 
     except JWTError as e:
-        await websocket.close(code=4001, reason=f"Invalid token: {str(e)}")
+        await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason=f"Invalid token: {str(e)}")
         return
 
     # Validate membership & Subscribe
     try:
         list_uuid = UUID(list_id)
     except ValueError:
-        await websocket.close(code=4003, reason="Invalid list_id format")
+        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="Invalid list_id format")
         return
 
     # Use manager to connect and subscribe (Dedicated scope for this list)
@@ -140,7 +141,7 @@ async def chat_websocket_endpoint(
     subscribed = await manager.subscribe_to_list(str(user.id), list_id, db, websocket=websocket)
     
     if not subscribed:
-        await websocket.close(code=4003, reason="Not a member of this list")
+        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="Not a member of this list")
         await manager.disconnect(str(user.id), websocket)
         return
 

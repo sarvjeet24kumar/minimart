@@ -12,7 +12,7 @@ from app.common.constants import (
     WS_EVENT_LIST_DELETED,
     WS_EVENT_LIST_UPDATED,
 )
-from app.common.enums import ItemStatus, MemberRole, NotificationType, UserRole
+from app.common.enums import MemberRole, NotificationType, UserRole
 from app.core.logging import get_logger
 from app.exceptions import ForbiddenException
 from app.models.shopping_list import ShoppingList
@@ -40,7 +40,6 @@ class ShoppingListService(BaseListService):
         self.db.add(shopping_list)
         await self.db.flush()
 
-        # Create owner membership with full permissions
         membership = ShoppingListMember(
             shopping_list_id=shopping_list.id,
             user_id=user.id,
@@ -117,7 +116,7 @@ class ShoppingListService(BaseListService):
 
             return list(shopping_lists), total
         else:
-            # Regular users only see active memberships on non-deleted lists
+
             filter_cond = [
                 ShoppingListMember.user_id == user.id,
                 ShoppingListMember.deleted_at.is_(None),
@@ -169,7 +168,7 @@ class ShoppingListService(BaseListService):
             list_id, user, require_owner_or_admin=True
         )
 
-        # Handle deleted_at field — Tenant Admin only
+
         is_restoring = False
         if "deleted_at" in data.model_fields_set:
             if user.role != UserRole.TENANT_ADMIN:
@@ -179,7 +178,6 @@ class ShoppingListService(BaseListService):
             if data.deleted_at is None and shopping_list.deleted_at:
                 is_restoring = True
 
-        # Block mutations on deleted lists unless restoring
         if not is_restoring:
             self._check_not_deleted(shopping_list)
 

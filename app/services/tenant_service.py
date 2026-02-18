@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.constants import DEFAULT_PAGE_SIZE
 from app.core.logging import get_logger
 from app.exceptions import ConflictException, NotFoundException
 from app.models.tenant import Tenant
@@ -78,7 +79,7 @@ class TenantService:
         return tenant
 
     async def get_all_tenants(
-        self, skip: int = 0, limit: int = 100
+        self, skip: int = 0, limit: int = DEFAULT_PAGE_SIZE
     ) -> tuple[list[Tenant], int]:
         """
         Get all tenants with pagination and counts.

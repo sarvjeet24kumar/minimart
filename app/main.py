@@ -11,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
 from app.api.health import router as health_router
 from app.core.config import settings
-from app.core.rate_limit import RateLimit
 from app.core.logging import setup_logging
 from app.db.database import close_db, init_db
 from app.exceptions.handlers import setup_exception_handlers
@@ -26,8 +25,6 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-
-    print("Starting MiniMart API...")
 
     # Ensure Redis is connected
     await RedisService.get_client() 

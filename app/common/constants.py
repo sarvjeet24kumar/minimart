@@ -55,11 +55,11 @@ NORMALIZATION_BYPASS_FIELDS = {
 WS_EVENT_ITEM_ADDED = "item_added"
 WS_EVENT_ITEM_UPDATED = "item_updated"
 WS_EVENT_ITEM_DELETED = "item_deleted"
+WS_EVENT_MEMBER_REMOVED = "member_removed"
 WS_EVENT_MEMBER_LEFT = "member_left"
 WS_EVENT_LIST_UPDATED = "list_updated"
 WS_EVENT_LIST_DELETED = "list_deleted"
 WS_EVENT_CHAT_MESSAGE = "chat_message"
-WS_EVENT_PERMISSIONS_UPDATED = "permissions_updated"
 
 # WebSocket Handshake Types
 WS_TYPE_CONNECTED = "connected"
@@ -87,9 +87,8 @@ DEFAULT_PAGE = 1
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 MIN_PAGE_SIZE = 1
-DEFAULT_CHAT_LIMIT = 50
-MAX_CHAT_LIMIT = 100
-MIN_CHAT_LIMIT = 1
+
+
 
 # Password Policy (Centralized)
 PASSWORD_MIN_LENGTH = 8

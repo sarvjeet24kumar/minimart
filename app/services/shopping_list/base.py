@@ -63,8 +63,6 @@ class BaseListService:
             logger.warning("Shopping list not found")
             raise NotFoundException("Shopping list not found")
 
-
-
         if shopping_list.tenant_id != user.tenant_id:
             logger.warning("Cross-tenant access denied to shopping list")
             raise ForbiddenException("Cross-tenant access denied")

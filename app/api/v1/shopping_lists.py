@@ -204,6 +204,3 @@ async def update_member_permissions(
     return await member_service.update_member_permissions(
         list_id, user_id, current_user, data
     )
-
-
-

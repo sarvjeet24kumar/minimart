@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import and_, desc, func, not_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.constants import DEFAULT_PAGE_SIZE
 from app.common.enums import NotificationType
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -73,7 +74,7 @@ class NotificationService:
         self,
         user_id: uuid.UUID,
         is_read: bool | None = None,
-        limit: int = 50,
+        limit: int = DEFAULT_PAGE_SIZE,
         skip: int = 0,
     ) -> list[Notification]:
         """
