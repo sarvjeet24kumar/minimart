@@ -52,13 +52,6 @@ NORMALIZATION_BYPASS_FIELDS = {
 }
 
 # WebSocket Event Types
-WS_EVENT_ITEM_ADDED = "item_added"
-WS_EVENT_ITEM_UPDATED = "item_updated"
-WS_EVENT_ITEM_DELETED = "item_deleted"
-WS_EVENT_MEMBER_REMOVED = "member_removed"
-WS_EVENT_MEMBER_LEFT = "member_left"
-WS_EVENT_LIST_UPDATED = "list_updated"
-WS_EVENT_LIST_DELETED = "list_deleted"
 WS_EVENT_CHAT_MESSAGE = "chat_message"
 
 # WebSocket Handshake Types

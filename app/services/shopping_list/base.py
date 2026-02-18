@@ -16,7 +16,6 @@ from app.exceptions import ForbiddenException, NotFoundException
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
-from app.websocket.manager import manager
 
 
 logger = get_logger(__name__)
@@ -117,20 +116,3 @@ class BaseListService:
         if shopping_list.deleted_at:
             logger.warning(f"Mutation blocked: List {shopping_list.id} is soft-deleted")
             raise ForbiddenException("This list is deleted.")
-
-    async def _publish_event(
-        self,
-        list_id: UUID,
-        event_type: str,
-        data: dict,
-        exclude_user_id: UUID | None = None,
-        only_scoped: bool = False,
-    ) -> None:
-        """Broadcast event directly to connected subscribers."""
-        await manager.broadcast_event(
-            str(list_id),
-            event_type,
-            data,
-            exclude_user_id=str(exclude_user_id) if exclude_user_id else None,
-            only_scoped=only_scoped,
-        )

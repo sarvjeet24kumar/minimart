@@ -9,8 +9,6 @@ from sqlalchemy.orm import selectinload
 
 from app.common.constants import (
     DEFAULT_PAGE_SIZE,
-    WS_EVENT_LIST_DELETED,
-    WS_EVENT_LIST_UPDATED,
 )
 from app.common.enums import MemberRole, NotificationType, UserRole
 from app.core.logging import get_logger
@@ -190,12 +188,6 @@ class ShoppingListService(BaseListService):
         await self.db.commit()
         await self.db.refresh(shopping_list)
 
-        await self._publish_event(
-            list_id,
-            WS_EVENT_LIST_UPDATED,
-            {"id": str(shopping_list.id), "name": shopping_list.name},
-        )
-
         notification_service = NotificationService(self.db)
         await notification_service.notify_list_members(
             list_id=list_id,
@@ -216,11 +208,5 @@ class ShoppingListService(BaseListService):
         await self.db.commit()
 
         logger.info("Shopping list deleted")
-
-        await self._publish_event(
-            list_id,
-            WS_EVENT_LIST_DELETED,
-            {"id": str(list_id)},
-        )
 
         return True

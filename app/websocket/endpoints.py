@@ -28,11 +28,11 @@ _TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "templates"
 
 if settings.is_development:
 
-    @router.get("/test/chat")
+    @router.get("/chat")
     async def chat_test_page():
         return FileResponse(_TEMPLATES_DIR / "chat.html", media_type="text/html")
 
-    @router.get("/test/notifications")
+    @router.get("/notifications")
     async def notifications_test_page():
         return FileResponse(_TEMPLATES_DIR / "notifications.html", media_type="text/html")
 
@@ -87,6 +87,15 @@ async def websocket_endpoint(
             
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        try:
+            await websocket.send_text(_json.dumps({
+                "type": "error",
+                "payload": {"message": f"Server error: {str(e)}"},
+            }))
+            await websocket.close(code=1011, reason=str(e))
+        except:
+            pass
     finally:
         await manager.disconnect(str(user.id), websocket)
 
@@ -136,12 +145,20 @@ async def chat_websocket_endpoint(
 
     # Use manager to connect and subscribe (Dedicated scope for this list)
     chat_scope = f"chat:{list_id}"
-    await websocket.accept()
-    await manager.connect(websocket, str(user.id), scope=chat_scope)
-    subscribed = await manager.subscribe_to_list(str(user.id), list_id, db, websocket=websocket)
-    
-    if not subscribed:
-        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="Not a member of this list")
+    try:
+        await websocket.accept()
+        await manager.connect(websocket, str(user.id), scope=chat_scope)
+        subscribed = await manager.subscribe_to_list(str(user.id), list_id, db, websocket=websocket)
+        
+        if not subscribed:
+            await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="Not a member of this list")
+            await manager.disconnect(str(user.id), websocket)
+            return
+    except Exception as e:
+        try:
+            await websocket.close(code=1011, reason=str(e))
+        except:
+            pass
         await manager.disconnect(str(user.id), websocket)
         return
 
@@ -191,7 +208,6 @@ async def chat_websocket_endpoint(
                 try:
                     await chat_service.send_message(list_uuid, user, content)
                 except Exception as e:
-                    print(f"Chat WS: Error in send_message: {e}")
                     await websocket.send_text(_json.dumps({
                         "type": "error",
                         "payload": {"message": f"Server error: {str(e)}"},
@@ -207,7 +223,10 @@ async def chat_websocket_endpoint(
                     "payload": {"message": f"Unknown message type: {msg_type}"},
                 }))
 
-    except WebSocketDisconnect:
-        pass
+    except Exception as e:
+        try:
+            await websocket.close(code=1011, reason=f"Internal Server Error: {str(e)}")
+        except:
+            pass
     finally:
         await manager.disconnect(str(user.id), websocket)

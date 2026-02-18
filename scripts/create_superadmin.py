@@ -21,7 +21,6 @@ async def create_superadmin():
         admin_user = result.scalar_one_or_none()
 
         if not admin_user:
-            print("Creating Global Super Admin User...")
             admin_user = User(
                 tenant_id=None,  # Super Admin is global
                 first_name="Super",
@@ -34,13 +33,10 @@ async def create_superadmin():
                 is_active=True,
             )
             db.add(admin_user)
-            print("Super Admin created.")
         else:
-            print("Updating existing Super Admin to be Global (tenant_id=None)...")
             admin_user.tenant_id = None
             admin_user.password = hash_password("admin1234")
             admin_user.role = UserRole.SUPER_ADMIN
-            print("User updated.")
 
         await db.commit()
 

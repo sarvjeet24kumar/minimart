@@ -7,98 +7,110 @@
 
 <body>
     <h2>MiniMart Chat Test</h2>
-    <input type="text" id="token" placeholder="JWT Token" style="width: 300px;"><br><br>
-    <input type="text" id="listId" placeholder="Shopping List UUID" style="width: 300px;"><br><br>
-    <button onclick="connect()">Connect</button>
+    <div>
+        <label>Token:</label><br>
+        <textarea id="token" rows="3" cols="60" placeholder="Paste JWT token here"></textarea><br><br>
+        <label>List ID:</label><br>
+        <input type="text" id="listId" placeholder="Shopping List UUID" style="width: 400px;"><br><br>
+        <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+    </div>
+    <p id="status">Status: Disconnected</p>
     <hr>
-    <div id="status">Disconnected</div>
     <div id="messages"
-        style="height: 200px; border: 1px solid #ccc; overflow-y: scroll; margin: 10px 0; padding: 10px;"></div>
-    <input type="text" id="msgInput" placeholder="Message..." disabled>
-    <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+        style="height: 300px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; margin-bottom: 10px;"></div>
+    <div>
+        <input type="text" id="msgInput" placeholder="Message..." disabled style="width: 400px;">
+        <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+    </div>
 
     <script>
-        let ws;
-        function connect() {
-            // Close existing connection if any
-            if (ws) {
-                ws.close();
-            }
+        var currentWs = null;
+        var connectionId = 0;
 
-            const token = document.getElementById('token').value;
-            const lid = document.getElementById('listId').value;
-            if (!token || !lid) {
-                alert("Please enter Token and List ID");
+        function log(text) {
+            var el = document.getElementById('messages');
+            var p = document.createElement('p');
+            p.textContent = new Date().toLocaleTimeString() + ' - ' + text;
+            el.appendChild(p);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function toggleConnection() {
+            if (currentWs) {
+                currentWs.close();
+                currentWs = null;
                 return;
             }
 
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const url = `${wsProtocol}//${window.location.host}/ws/shopping-lists/${lid}/chat?token=${token}`;
+            var token = document.getElementById('token').value.trim();
+            var lid = document.getElementById('listId').value.trim();
+            if (!token) { alert('Paste a token'); return; }
+            if (!lid) { alert('Enter a List ID'); return; }
 
-            document.getElementById('status').innerText = 'Connecting...';
-            ws = new WebSocket(url);
+            connectionId++;
+            var myId = connectionId;
+            var url = 'ws://localhost:8000/ws/shopping-lists/' + lid + '/chat?token=' + token;
+            log('Connecting...');
 
-            ws.onopen = () => {
-                document.getElementById('status').innerText = 'Connected';
-                document.getElementById('status').style.color = 'green';
+            var ws = new WebSocket(url);
+            currentWs = ws;
+
+            ws.onopen = function () {
+                if (myId !== connectionId) { ws.close(); return; }
+                document.getElementById('status').innerText = 'Status: Connected';
+                document.getElementById('connectBtn').innerText = 'Disconnect';
                 document.getElementById('msgInput').disabled = false;
                 document.getElementById('sendBtn').disabled = false;
+                log('Connected!');
             };
 
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                const msgDiv = document.getElementById('messages');
-
-                // Handle direct chat_message type
-                if (data.type === 'chat_message') {
-                    msgDiv.innerHTML += `<p><b>${data.sender_name}:</b> ${data.message}</p>`;
+            ws.onmessage = function (event) {
+                if (myId !== connectionId) return;
+                try {
+                    var data = JSON.parse(event.data);
+                    if (data.type === 'chat_message') {
+                        log(data.sender_name + ': ' + data.message);
+                    } else if (data.type === 'connected') {
+                        log('Joined chat room for list: ' + (data.payload.list_id || ''));
+                    } else if (data.type === 'error') {
+                        log('ERROR: ' + (data.payload.message || JSON.stringify(data)));
+                    } else if (data.type === 'pong') {
+                        // ignore
+                    } else {
+                        log('[' + data.type + '] ' + JSON.stringify(data.payload || data));
+                    }
+                } catch (e) {
+                    log('Parse error: ' + e.message);
                 }
-                // Handle standardized event type
-                else if (data.type === 'event' && data.payload.event === 'chat_message') {
-                    const chat = data.payload.data;
-                    msgDiv.innerHTML += `<p><b>${chat.sender_name}:</b> ${chat.message}</p>`;
-                }
-                // Handle Kicked event
-                else if (data.type === 'kicked') {
-                    msgDiv.innerHTML += `<div style="background: #ffe6e6; border: 1px solid red; padding: 5px; margin: 5px 0;">
-                        <b>System Notice:</b> You have been Removed.<br>
-                        Reason: ${data.payload.reason}<br>
-                        List ID: ${data.payload.list_id}
-                    </div>`;
-                }
-                else {
-                    msgDiv.innerHTML += `<p style="color: gray;"><i>[${data.type}] ${JSON.stringify(data.payload || {})}</i></p>`;
-                }
-                msgDiv.scrollTop = msgDiv.scrollHeight;
             };
 
-            ws.onclose = (event) => {
-                document.getElementById('status').innerText = `Disconnected (${event.reason || 'No reason'})`;
-                document.getElementById('status').style.color = 'red';
+            ws.onclose = function (event) {
+                if (myId !== connectionId) return;
+                currentWs = null;
+                document.getElementById('status').innerText = 'Status: Disconnected (code=' + event.code + ')';
+                document.getElementById('connectBtn').innerText = 'Connect';
                 document.getElementById('msgInput').disabled = true;
                 document.getElementById('sendBtn').disabled = true;
+                log('Disconnected: code=' + event.code + ' reason=' + (event.reason || 'none'));
             };
 
-            ws.onerror = (error) => {
-                document.getElementById('status').innerText = 'Error connecting';
-                document.getElementById('status').style.color = 'red';
+            ws.onerror = function () {
+                if (myId !== connectionId) return;
+                log('WebSocket error - check browser console (F12)');
             };
         }
 
         function sendMessage() {
-            const msgInput = document.getElementById('msgInput');
-            const msg = msgInput.value.trim();
-            if (msg && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'chat_message', message: msg }));
-                msgInput.value = '';
+            var input = document.getElementById('msgInput');
+            var msg = input.value.trim();
+            if (msg && currentWs && currentWs.readyState === 1) {
+                currentWs.send(JSON.stringify({ type: 'chat_message', message: msg }));
+                input.value = '';
             }
         }
 
-        // Allow 'Enter' key to send message
         document.getElementById('msgInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
+            if (e.key === 'Enter') sendMessage();
         });
     </script>
 </body>

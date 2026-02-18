@@ -9,14 +9,13 @@ from sqlalchemy.orm import selectinload
 
 from app.common.constants import (
     DEFAULT_PAGE_SIZE,
-    WS_EVENT_MEMBER_REMOVED,
 )
 from app.core.logging import get_logger
 from app.exceptions import ForbiddenException, NotFoundException
 from app.models.shopping_list_member import ShoppingListMember
+from app.websocket.manager import manager
 from app.models.user import User
 from app.services.shopping_list.base import BaseListService
-from app.websocket.manager import manager
 
 logger = get_logger(__name__)
 
@@ -83,11 +82,10 @@ class ListMemberService(BaseListService):
         membership.deleted_at = func.now()
         await self.db.commit()
 
-        logger.info("Member removed from list")
+        # Kick user from chat immediately
+        await manager.kick_user_from_list(str(member_user_id), str(list_id))
 
-        await manager.kick_user_from_list(
-            str(member_user_id), str(list_id), WS_EVENT_MEMBER_REMOVED
-        )
+        logger.info("Member removed from list")
 
         return True
 

@@ -36,7 +36,6 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    print("Shutting down MiniMart API...")
     await RedisService.close()
     await close_db()
 

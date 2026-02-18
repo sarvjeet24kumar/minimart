@@ -63,7 +63,6 @@ class NotificationService:
                             "created_at": notification.created_at.astimezone(ZoneInfo(settings.TIMEZONE)).isoformat(),
                         },
                     },
-                    related_list_id=str(notification.shopping_list_id) if notification.shopping_list_id else None
                 )
             except Exception as e:
                 logger.error(f"Failed to dispatch WebSocket notification: {e}")
@@ -130,8 +129,6 @@ class NotificationService:
     ) -> int:
         """
         Notify all members of a shopping list about an event.
-        If skip_dedup is True, notifications are delivered to all connections
-        regardless of subscription state (use for notification-only events like invitations).
         """
         result = await self.db.execute(
             select(ShoppingListMember.user_id).where(

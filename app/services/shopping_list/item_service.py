@@ -8,9 +8,6 @@ from sqlalchemy import and_, func, select
 
 from app.common.constants import (
     DEFAULT_PAGE_SIZE,
-    WS_EVENT_ITEM_ADDED,
-    WS_EVENT_ITEM_DELETED,
-    WS_EVENT_ITEM_UPDATED,
 )
 from app.common.enums import ItemStatus, NotificationType
 from app.core.logging import get_logger
@@ -58,18 +55,6 @@ class ListItemService(BaseListService):
         await self.db.refresh(item)
 
         logger.info("Item added")
-
-        await self._publish_event(
-            list_id,
-            WS_EVENT_ITEM_ADDED,
-            {
-                "id": str(item.id),
-                "name": item.name,
-                "quantity": item.quantity,
-                "status": item.status.value,
-                "added_by": str(user.id),
-            },
-        )
 
         notification_service = NotificationService(self.db)
         await notification_service.notify_list_members(
@@ -169,17 +154,6 @@ class ListItemService(BaseListService):
         await self.db.commit()
         await self.db.refresh(item)
 
-        await self._publish_event(
-            item.shopping_list_id,
-            WS_EVENT_ITEM_UPDATED,
-            {
-                "id": str(item.id),
-                "name": item.name,
-                "quantity": item.quantity,
-                "status": item.status.value,
-            },
-        )
-
         notification_service = NotificationService(self.db)
         notif_type = (
             NotificationType.ITEM_PURCHASED
@@ -223,12 +197,6 @@ class ListItemService(BaseListService):
         item.deleted_by = user.id
 
         await self.db.commit()
-
-        await self._publish_event(
-            list_id,
-            WS_EVENT_ITEM_DELETED,
-            {"id": str(item_id)},
-        )
 
         notification_service = NotificationService(self.db)
         await notification_service.notify_list_members(

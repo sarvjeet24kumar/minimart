@@ -169,7 +169,7 @@ The MiniMart Team
 </head>
 <body>
     <div class="container">
-        <h1>You're Invited! </h1>
+        <h1>You're Invited!</h1>
         <p><strong>{inviter_name}</strong> has invited you to collaborate on:</p>
         <p class="list-name">{list_name}</p>
         <p>Join them to add items, mark purchases, and keep your shopping synchronized in real-time!</p>
