@@ -19,7 +19,6 @@ class ValidationException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            code="VALIDATION_ERROR",
             message=message,
             details=details,
         )

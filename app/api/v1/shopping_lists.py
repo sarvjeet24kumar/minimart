@@ -2,7 +2,6 @@
 Shopping List Endpoints
 """
 
-from math import ceil
 from typing import Annotated
 from uuid import UUID
 
@@ -66,19 +65,10 @@ async def list_shopping_lists(
     Get all shopping lists visible to the user.
     """
     list_service = ShoppingListService(db)
-    items, total = await list_service.get_user_lists(
+    return await list_service.get_user_lists(
         current_user,
-        skip=pagination.skip,
-        limit=pagination.size,
+        pagination=pagination,
         include_archived=include_archived,
-    )
-    
-    return PaginatedResponse(
-        data=items,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=ceil(total / pagination.size) if total > 0 else 1,
     )
 
 @router.get(
@@ -150,20 +140,11 @@ async def list_members(
     Get all members of a shopping list.
     """
     member_service = ListMemberService(db)
-    items, total = await member_service.get_members(
+    return await member_service.get_members(
         list_id,
         current_user,
-        skip=pagination.skip,
-        limit=pagination.size,
+        pagination=pagination,
         include_deleted=include_deleted,
-    )
-    
-    return PaginatedResponse(
-        data=items,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=ceil(total / pagination.size) if total > 0 else 1,
     )
 
 @router.delete(

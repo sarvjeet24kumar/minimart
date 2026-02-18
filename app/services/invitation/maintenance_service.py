@@ -7,10 +7,10 @@ from sqlalchemy import and_, update
 from app.common.enums import InviteStatus
 from app.core.time import get_now
 from app.models.invitation import ShoppingListInvite
-from app.services.invitation.base import BaseInvitationService
+from app.services.base import BaseService
 
 
-class InvitationMaintenanceService(BaseInvitationService):
+class InvitationMaintenanceService(BaseService):
     """Handles cleanup and background maintenance of invitations."""
 
     async def expire_stale_invites(self) -> int:

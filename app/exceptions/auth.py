@@ -9,24 +9,6 @@ from fastapi import status
 from app.exceptions.base import MiniMartException
 
 
-class CredentialsException(MiniMartException):
-    """401 Unauthorized - Could not validate credentials."""
-
-    def __init__(
-        self,
-        message: str = "Could not validate credentials",
-        headers: dict[str, str] | None = None,
-        details: Any | None = None,
-    ):
-        super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code="CREDENTIALS_ERROR",
-            message=message,
-            headers=headers,
-            details=details,
-        )
-
-
 class UnauthorizedException(MiniMartException):
     """401 Unauthorized - Missing or invalid credentials."""
 
@@ -37,7 +19,6 @@ class UnauthorizedException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            code="UNAUTHORIZED",
             message=message,
             details=details,
         )
@@ -53,7 +34,6 @@ class ForbiddenException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="FORBIDDEN",
             message=message,
             details=details,
         )
@@ -69,7 +49,6 @@ class EmailNotVerifiedException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="EMAIL_NOT_VERIFIED",
             message=message,
             details=details,
         )
@@ -85,7 +64,6 @@ class InvitationExpiredException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_400_BAD_REQUEST,
-            code="INVITATION_EXPIRED",
             message=message,
             details=details,
         )
@@ -101,7 +79,6 @@ class InvitationAlreadyUsedException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_400_BAD_REQUEST,
-            code="INVITATION_USED",
             message=message,
             details=details,
         )

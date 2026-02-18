@@ -6,18 +6,15 @@ Chat Service
 from datetime import datetime
 from typing import Any
 from uuid import UUID
-from zoneinfo import ZoneInfo
+
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.common.constants import (
-    DEFAULT_PAGE_SIZE,
-    WS_EVENT_CHAT_MESSAGE,
-)
+from app.common.constants import WS_EVENT_CHAT_MESSAGE
+from app.core.pagination import PaginationParams
 from app.common.enums import UserRole
-from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.time import get_now
 from app.exceptions import ForbiddenException, NotFoundException, ValidationException
@@ -25,6 +22,8 @@ from app.models.chat_message import ChatMessage
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
+from app.schemas.common import PaginatedResponse
+from app.schemas.chat import ChatMessageResponse
 from app.websocket.manager import manager
 
 logger = get_logger(__name__)
@@ -113,7 +112,7 @@ class ChatService:
             "sender_id": str(user.id),
             "sender_name": user.username,
             "message": message.content,
-            "created_at": message.created_at.astimezone(ZoneInfo(settings.TIMEZONE)).isoformat(),
+            "created_at": message.created_at.isoformat(),
         }
 
         await manager.broadcast_chat(
@@ -129,12 +128,10 @@ class ChatService:
         self,
         list_id: UUID,
         user: User,
-        limit: int = DEFAULT_PAGE_SIZE,
-        skip: int = 0,
-    ) -> tuple[list[dict[str, Any]], int]:
+        pagination: PaginationParams,
+    ) -> PaginatedResponse[ChatMessageResponse]:
         """
         Load chat history for a shopping list (Newest First).
-
         """
         await self._verify_membership(list_id, user)
 
@@ -159,22 +156,27 @@ class ChatService:
             )
         )
 
-        query = query.order_by(ChatMessage.created_at.desc()).offset(skip).limit(limit)
+        query = query.order_by(ChatMessage.created_at.desc()).offset(pagination.skip).limit(pagination.size)
         result = await self.db.execute(query)
         messages = result.scalars().all()
 
         items = [
-            {
-                "id": str(m.id),
-                "shopping_list_id": str(m.shopping_list_id),
-                "sender_id": str(m.sender_id),
-                "sender_name": m.sender.username if m.sender else "Unknown",
-                "message": m.content,
-                "created_at": m.created_at.astimezone(ZoneInfo(settings.TIMEZONE)).isoformat(),
-            }
+            ChatMessageResponse(
+                id=m.id,
+                shopping_list_id=m.shopping_list_id,
+                sender_id=m.sender_id,
+                sender_name=m.sender.username if m.sender else "Unknown",
+                message=m.content,
+                created_at=m.created_at,
+            )
             for m in messages
         ]
-        return items, total
+        return PaginatedResponse(
+            data=items,
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )
 
 
     async def delete_message(

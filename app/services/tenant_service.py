@@ -9,14 +9,16 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.constants import DEFAULT_PAGE_SIZE
+from app.core.pagination import PaginationParams
 from app.core.logging import get_logger
+from app.core.time import get_now
 from app.exceptions import ConflictException, NotFoundException
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.shopping_list import ShoppingList
 from app.models.item import Item
-from app.schemas.tenant import TenantCreate, TenantUpdate
+from app.schemas.common import PaginatedResponse
+from app.schemas.tenant import TenantCreate, TenantDetailResponse, TenantUpdate
 
 logger = get_logger(__name__)
 
@@ -79,8 +81,8 @@ class TenantService:
         return tenant
 
     async def get_all_tenants(
-        self, skip: int = 0, limit: int = DEFAULT_PAGE_SIZE
-    ) -> tuple[list[Tenant], int]:
+        self, pagination: PaginationParams,
+    ) -> PaginatedResponse[TenantDetailResponse]:
         """
         Get all tenants with pagination and counts.
         """
@@ -89,9 +91,10 @@ class TenantService:
         total = count_result.scalar_one()
 
         # Fetch tenants
-        result = await self.db.execute(select(Tenant).offset(skip).limit(limit))
+        result = await self.db.execute(select(Tenant).offset(pagination.skip).limit(pagination.size))
         tenants = list(result.scalars().all())
 
+        items = []
         # For each tenant, fetch counts (simplified for now, can be optimized with subqueries if needed)
         for tenant in tenants:
             user_count = await self.db.execute(
@@ -109,8 +112,14 @@ class TenantService:
             tenant.total_users = user_count.scalar_one()
             tenant.total_lists = list_count.scalar_one()
             tenant.total_items = item_count.scalar_one()
+            items.append(TenantDetailResponse.model_validate(tenant))
 
-        return tenants, total
+        return PaginatedResponse(
+            data=items,
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )
 
     async def update_tenant(self, tenant_id: UUID, data: TenantUpdate) -> Tenant:
         tenant = await self.get_tenant(tenant_id)
@@ -142,7 +151,7 @@ class TenantService:
             logger.info("Tenant deletion failed: Already deleted")
             raise ConflictException("Tenant already deleted")
 
-        tenant.deleted_at = func.now()
+        tenant.deleted_at = get_now()
         tenant.is_active = False
         await self.db.commit()
         await self.db.refresh(tenant)

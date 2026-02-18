@@ -12,11 +12,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.common.constants import DEFAULT_PAGE_SIZE
+from app.core.pagination import PaginationParams
 from app.common.enums import UserRole
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import generate_otp, hash_password
+from app.core.time import get_now
 from app.exceptions import (
     ConflictException,
     ForbiddenException,
@@ -24,9 +25,11 @@ from app.exceptions import (
 )
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.common import PaginatedResponse
+from app.schemas.user import UserAdminResponse, UserCreate, UserResponse, UserUpdate
 from app.services.email_service import EmailService
 from app.services.redis_service import RedisService
+from app.utils.password import validate_password_strength
 
 logger = get_logger(__name__)
 
@@ -37,20 +40,34 @@ class UserService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    def _map_user_response(
+        self, user: User, requester: User
+    ) -> UserAdminResponse | UserResponse:
+        """Helper to map user model to appropriate response schema based on role."""
+        if requester.role in [UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN]:
+            return UserAdminResponse.model_validate(user)
+        return UserResponse.model_validate(user)
+
     async def create_user(
         self,
         data: UserCreate,
-        tenant_id: UUID | None = None,
-        role: UserRole = UserRole.USER,
+        requester: User,
         background_tasks: BackgroundTasks | None = None,
-    ) -> User:
+    ) -> UserAdminResponse:
         """
         Create a new user.
+        Role and tenant are determined by the requester's role:
+        - Super Admin creates Tenant Admins (no tenant scoping)
+        - Tenant Admin creates Users (scoped to their tenant)
         """
-        target_tenant_id = tenant_id or data.tenant_id
-
-        # Validate password strength
-        from app.utils.password import validate_password_strength
+        if requester.role == UserRole.SUPER_ADMIN:
+            role = UserRole.TENANT_ADMIN
+            target_tenant_id = data.tenant_id
+        elif requester.role == UserRole.TENANT_ADMIN:
+            role = UserRole.USER
+            target_tenant_id = requester.tenant_id
+        else:
+            raise ForbiddenException("Only Admins can create users")
 
         validate_password_strength(data.password)
 
@@ -117,12 +134,10 @@ class UserService:
             await EmailService.send_otp_email(user.email, otp)
 
         logger.info("User created successfully")
-        return user
+        return UserAdminResponse.model_validate(user)
 
-    async def get_user(self, user_id: UUID, requester: User) -> User:
-        """
-        Get a user by ID with strict access control.
-        """
+    async def _get_user_with_access(self, user_id: UUID, requester: User) -> User:
+        """Internal helper to get User model with access control."""
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
 
@@ -151,13 +166,21 @@ class UserService:
 
         raise ForbiddenException("Access denied")
 
+    async def get_user(
+        self, user_id: UUID, requester: User
+    ) -> UserAdminResponse | UserResponse:
+        """
+        Get a user by ID with strict access control.
+        """
+        user = await self._get_user_with_access(user_id, requester)
+        return self._map_user_response(user, requester)
+
     async def get_users_in_tenant(
         self,
         requester: User,
+        pagination: PaginationParams,
         tenant_id: UUID | None = None,
-        skip: int = 0,
-        limit: int = DEFAULT_PAGE_SIZE,
-    ) -> tuple[list[User], int]:
+    ) -> PaginatedResponse[UserAdminResponse | UserResponse]:
         """
         Get users based on requester context.
         """
@@ -168,7 +191,7 @@ class UserService:
         # Regular users only see active/non-deleted users
         if requester.role == UserRole.USER:
             filters.extend([User.is_active.is_(True), User.deleted_at.is_(None)])
-            
+
         if tenant_id:
             filters.append(User.tenant_id == tenant_id)
         else:
@@ -182,19 +205,24 @@ class UserService:
         count_result = await self.db.execute(count_query)
         total = count_result.scalar_one()
 
-        result = await self.db.execute(query.offset(skip).limit(limit))
+        result = await self.db.execute(
+            query.offset(pagination.skip).limit(pagination.size)
+        )
         users = result.scalars().all()
 
-        return list(users), total
+        items = [self._map_user_response(u, requester) for u in users]
+        return PaginatedResponse(
+            data=items, total=total, page=pagination.page, size=pagination.size
+        )
 
     async def update_user(
         self, user_id: UUID, requester: User, data: UserUpdate
-    ) -> User:
+    ) -> UserAdminResponse | UserResponse:
         """
         Update a user with access control and restrictions.
         """
-        user = await self.get_user(user_id, requester)
-        
+        user = await self._get_user_with_access(user_id, requester)
+
         # Regular users can only update their own account
         if requester.role == UserRole.USER and requester.id != user.id:
             raise ForbiddenException("Users can only update their own account")
@@ -202,7 +230,9 @@ class UserService:
         target_tenant_id = user.tenant_id
         update_data = data.model_dump(exclude_unset=True)
         if requester.id == user.id:
-            if data.is_active is not None or (hasattr(data, 'deleted_at') and data.deleted_at is not None):
+            if data.is_active is not None or (
+                hasattr(data, "deleted_at") and data.deleted_at is not None
+            ):
                 raise ForbiddenException(
                     "You cannot modify your own account status (active/deleted)"
                 )
@@ -229,18 +259,19 @@ class UserService:
 
         updated_user = result.scalar_one()
         logger.info("User updated")
-        return updated_user
+        return self._map_user_response(updated_user, requester)
 
     async def deactivate_user(self, user_id: UUID, requester: User) -> Response:
         """
         Deactivate a user (soft delete).
         """
-        user = await self.get_user(user_id, requester)
-        
-        # Access control based on roles
+        user = await self._get_user_with_access(user_id, requester)
+
         if requester.role == UserRole.USER:
             if requester.id != user.id:
-                raise ForbiddenException("Users are not allowed to deactivate other accounts")
+                raise ForbiddenException(
+                    "Users are not allowed to deactivate other accounts"
+                )
 
         else:
 
@@ -251,7 +282,7 @@ class UserService:
             raise ConflictException("User is already deactivated")
 
         user.is_active = False
-        user.deleted_at = func.now()
+        user.deleted_at = get_now()
         await self.db.commit()
         await self.db.refresh(user)
         logger.info("User deactivated")

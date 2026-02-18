@@ -33,8 +33,3 @@ class ChatMessageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ChatHistoryResponse(BaseModel):
-    """Schema for paginated chat history."""
-
-    messages: list[ChatMessageResponse]
-    has_more: bool = False

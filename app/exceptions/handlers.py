@@ -20,7 +20,6 @@ async def minimart_exception_handler(request: Request, exc: MiniMartException):
         content={
             "success": False,
             "error": {
-                "code": exc.code,
                 "message": exc.detail.get("message", str(exc.detail)) if isinstance(exc.detail, dict) else str(exc.detail),
                 "details": exc.detail.get("details", {}) if isinstance(exc.detail, dict) else {},
             },
@@ -40,7 +39,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "success": False,
             "error": {
-                "code": "VALIDATION_ERROR",
                 "message": "Invalid input",
                 "details": formatted_errors,
             },
@@ -55,7 +53,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         content={
             "success": False,
             "error": {
-                "code": "HTTP_ERROR",
                 "message": str(exc.detail),
                 "details": {},
             },
@@ -70,7 +67,6 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
         content={
             "success": False,
             "error": {
-                "code": "RATE_LIMIT_EXCEEDED",
                 "message": "Too many requests. Please try again later.",
                 "details": {"limit": str(exc.detail)},
             },

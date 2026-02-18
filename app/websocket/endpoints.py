@@ -36,6 +36,46 @@ if settings.is_development:
     async def notifications_test_page():
         return FileResponse(_TEMPLATES_DIR / "notifications.html", media_type="text/html")
 
+
+async def _authenticate_ws(
+    websocket: WebSocket, token: str, db: AsyncSession
+) -> User | None:
+    """
+    Shared WebSocket authentication helper.
+
+    Decodes token, checks blacklist, loads user, verifies active status.
+    Closes the WebSocket with WS_CLOSE_AUTH_FAILED and returns None on failure.
+    Returns the authenticated User on success.
+    """
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Invalid token type")
+            return None
+
+        # Check if token is blacklisted (logout)
+        token_id = payload.get("jti")
+        if token_id and await RedisService.is_access_token_blacklisted(token_id):
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Token revoked")
+            return None
+
+        user_id = payload.get("sub")
+        result = await db.execute(
+            select(User).where(User.id == UUID(user_id))
+        )
+        user = result.scalar_one_or_none()
+
+        if not user or not (user.is_active and not user.deleted_at):
+            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="User not found, inactive, or deleted")
+            return None
+
+        return user
+
+    except JWTError as e:
+        await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason=f"Invalid token: {str(e)}")
+        return None
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -45,32 +85,10 @@ async def websocket_endpoint(
     """
     WebSocket endpoint for real-time updates.
     """
-    try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Invalid token type")
-            return
-        
-        # Check if token is blacklisted (logout)
-        token_id = payload.get("jti")
-        if token_id and await RedisService.is_access_token_blacklisted(token_id):
-            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Token revoked")
-            return
-
-        user_id = payload.get("sub")
-        result = await db.execute(
-            select(User).where(User.id == UUID(user_id))
-        )
-        user = result.scalar_one_or_none()
-        
-        if not user or not (user.is_active and not user.deleted_at):
-            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="User not found, inactive, or deleted")
-            return
-        
-    except JWTError as e:
-        await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason=f"Invalid token: {str(e)}")
+    user = await _authenticate_ws(websocket, token, db)
+    if not user:
         return
-    
+
     # Connect with "global" scope
     await websocket.accept()
     await manager.connect(websocket, str(user.id), scope="global")
@@ -110,37 +128,14 @@ async def chat_websocket_endpoint(
     """
     Dedicated WebSocket endpoint for list-scoped real-time chat.
     """
-    try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Invalid token type")
-            return
-
-        # Check if token is blacklisted (logout)
-        token_id = payload.get("jti")
-        if token_id and await RedisService.is_access_token_blacklisted(token_id):
-            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Token revoked")
-            return
-
-        user_id = payload.get("sub")
-        result = await db.execute(
-            select(User).where(User.id == UUID(user_id))
-        )
-        user = result.scalar_one_or_none()
-
-        if not user or not (user.is_active and not user.deleted_at):
-            await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="User not found, inactive, or deleted")
-            return
-
-    except JWTError as e:
-        await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason=f"Invalid token: {str(e)}")
+    user = await _authenticate_ws(websocket, token, db)
+    if not user:
         return
 
-    # Validate membership & Subscribe
     try:
         list_uuid = UUID(list_id)
     except ValueError:
-        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="Invalid list_id format")
+        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="Invalid list ID format")
         return
 
     # Use manager to connect and subscribe (Dedicated scope for this list)

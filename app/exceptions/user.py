@@ -19,7 +19,6 @@ class NotFoundException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
-            code="NOT_FOUND",
             message=message,
             details=details,
         )
@@ -35,7 +34,6 @@ class ConflictException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_409_CONFLICT,
-            code="CONFLICT",
             message=message,
             details=details,
         )
@@ -51,7 +49,6 @@ class TenantInactiveException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="TENANT_INACTIVE",
             message=message,
             details=details,
         )
@@ -67,7 +64,6 @@ class RateLimitException(MiniMartException):
     ):
         super().__init__(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            code="RATE_LIMITED",
             message=message,
             details=details,
         )

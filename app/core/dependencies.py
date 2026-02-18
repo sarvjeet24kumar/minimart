@@ -35,28 +35,16 @@ from app.services.redis_service import RedisService
 security = HTTPBearer(auto_error=True)
 
 
-class PaginationParams:
-    """Dependency for normalized pagination parameters."""
-
-    def __init__(self, page: int = Query(DEFAULT_PAGE, ge=DEFAULT_PAGE), size: int = Query(DEFAULT_PAGE_SIZE, ge=MIN_PAGE_SIZE, le=MAX_PAGE_SIZE)):
-        self.page = page
-        self.size = size
-        self.skip = (self.page - 1) * self.size
+from app.core.pagination import PaginationParams
 
 
 async def get_tenant_id(
-    tenant_id: Annotated[str | None, Header(alias="Tenant-ID")] = None,
+    tenant_id: Annotated[UUID | None, Header(alias="Tenant-ID")] = None,
 ) -> UUID | None:
     """
-    Dependency to extract Tenant-ID from header.
+    Dependency to extract Tenant-ID from header as UUID.
     """
-    if not tenant_id or tenant_id.lower() == "none":
-        return None
-
-    try:
-        return UUID(tenant_id)
-    except ValueError as e:
-        raise NotFoundException("Invalid Tenant-ID format") from e
+    return tenant_id
 
 
 async def get_current_user(
@@ -111,7 +99,6 @@ async def get_current_verified_user(
     if not current_user.is_email_verified:
         raise MiniMartException(
             status_code=403,
-            code="ACCOUNT_NOT_VERIFIED",
             message="Please verify your account before continuing.",
         )
     return current_user

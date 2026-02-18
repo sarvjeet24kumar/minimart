@@ -2,7 +2,6 @@
 Chat Endpoints
 """
 
-from math import ceil
 from typing import Annotated
 from uuid import UUID
 
@@ -37,16 +36,10 @@ async def get_chat_messages(
     Supports pagination with `page` and `size`.
     """
     chat_service = ChatService(db)
-    items, total = await chat_service.get_messages(
-        list_id, current_user, limit=pagination.size, skip=pagination.skip
-    )
-    
-    return PaginatedResponse(
-        data=items,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=ceil(total / pagination.size) if total > 0 else 1,
+    return await chat_service.get_messages(
+        list_id,
+        current_user,
+        pagination,
     )
 
 

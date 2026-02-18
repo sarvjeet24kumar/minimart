@@ -9,7 +9,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import selectinload
 
-from app.common.constants import DEFAULT_PAGE_SIZE
+from app.core.pagination import PaginationParams
 from app.common.enums import InviteStatus, NotificationType, UserRole
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -26,13 +26,15 @@ from app.models.invitation import ShoppingListInvite
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
+from app.schemas.common import MessageResponse, PaginatedResponse
+from app.schemas.invitation import InviteResponse, InvitationResponse
+from app.services.base import BaseService
 from app.services.email_service import EmailService
-from app.services.invitation.base import BaseInvitationService
 from app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
 
-class InvitationManagementService(BaseInvitationService):
+class InvitationManagementService(BaseService):
     """Handles creation and administrative management of invitations."""
 
     async def send_invitation(
@@ -41,7 +43,7 @@ class InvitationManagementService(BaseInvitationService):
         user_id: UUID,
         inviter: User,
         background_tasks: BackgroundTasks | None = None,
-    ) -> datetime:
+    ) -> InviteResponse:
         """Create a DB-backed invitation to join a shopping list."""
         if inviter.role == UserRole.SUPER_ADMIN:
             logger.warning("Super Admin attempted shopping list operation")
@@ -177,11 +179,14 @@ class InvitationManagementService(BaseInvitationService):
             exclude_user_id=inviter.id,
         )
 
-        return expires_at
+        return InviteResponse(
+            message="Invitation sent successfully",
+            expires_at=expires_at,
+        )
 
     async def cancel_invitation(
         self, invite_id: UUID, user: User
-    ) -> None:
+    ) -> MessageResponse:
         """Cancel an invitation."""
         if user.role == UserRole.SUPER_ADMIN:
             logger.warning("Super Admin attempted shopping list operation")
@@ -215,7 +220,6 @@ class InvitationManagementService(BaseInvitationService):
             logger.warning("Attempted to cancel non-pending invitation")
             raise MiniMartException(
                 status_code=400,
-                code="INVITE_NOT_PENDING",
                 message=f"Cannot cancel — invitation is already {invite.status.value.lower()}.",
             )
 
@@ -224,13 +228,14 @@ class InvitationManagementService(BaseInvitationService):
         await self.db.commit()
 
         logger.info("Invitation cancelled")
+        return MessageResponse(message="Invitation cancelled successfully")
 
     async def resend_invitation(
         self,
         invite_id: UUID,
         user: User,
         background_tasks: BackgroundTasks | None = None,
-    ) -> datetime:
+    ) -> InviteResponse:
         """Resend an invitation."""
         if user.role == UserRole.SUPER_ADMIN:
             logger.warning("Super Admin attempted shopping list operation")
@@ -267,7 +272,6 @@ class InvitationManagementService(BaseInvitationService):
             logger.warning("Attempted to resend non-pending invitation")
             raise MiniMartException(
                 status_code=400,
-                code="INVITE_NOT_PENDING",
                 message=f"Cannot resend — invitation is already {invite.status.value.lower()}.",
             )
 
@@ -310,16 +314,18 @@ class InvitationManagementService(BaseInvitationService):
                 reject_url=reject_url,
             )
 
-        return invite.expires_at
+        return InviteResponse(
+            message="Invitation resent successfully",
+            expires_at=invite.expires_at,
+        )
 
     async def get_list_invites(
         self,
         list_id: UUID,
         user: User,
+        pagination: PaginationParams,
         status_filter: str | None = None,
-        skip: int = 0,
-        limit: int = DEFAULT_PAGE_SIZE,
-    ) -> tuple[list[ShoppingListInvite], int]:
+    ) -> PaginatedResponse[InvitationResponse]:
         """Get invitations for a specific list."""
         if user.role == UserRole.SUPER_ADMIN:
             logger.warning("Super Admin attempted shopping list operation")
@@ -340,7 +346,6 @@ class InvitationManagementService(BaseInvitationService):
         if user.role != UserRole.TENANT_ADMIN and shopping_list.owner_id != user.id:
             logger.warning("Unauthorized invitation view attempt (not owner/admin)")
             raise ForbiddenException("Only the list owner or tenant admin can view invitations")
-
         query = select(ShoppingListInvite).options(
             selectinload(ShoppingListInvite.invited_user),
             selectinload(ShoppingListInvite.invited_by_user),
@@ -355,19 +360,23 @@ class InvitationManagementService(BaseInvitationService):
         count_q = select(func.count()).select_from(query.subquery())
         total = (await self.db.execute(count_q)).scalar() or 0
 
-        query = query.order_by(ShoppingListInvite.created_at.desc()).offset(skip).limit(limit)
+        query = query.order_by(ShoppingListInvite.created_at.desc()).offset(pagination.skip).limit(pagination.size)
         result = await self.db.execute(query)
         invites = result.scalars().all()
 
-        return list(invites), total
+        return PaginatedResponse(
+            data=[InvitationResponse.model_validate(i) for i in invites],
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )
 
     async def get_my_invites(
         self,
         user: User,
+        pagination: PaginationParams,
         status_filter: str | None = None,
-        skip: int = 0,
-        limit: int = DEFAULT_PAGE_SIZE,
-    ) -> tuple[list[ShoppingListInvite], int]:
+    ) -> PaginatedResponse[InvitationResponse]:
         """Get invitations sent to the current user."""
         self._block_super_admin(user)
         query = select(ShoppingListInvite).options(
@@ -384,8 +393,13 @@ class InvitationManagementService(BaseInvitationService):
         count_q = select(func.count()).select_from(query.subquery())
         total = (await self.db.execute(count_q)).scalar() or 0
 
-        query = query.order_by(ShoppingListInvite.created_at.desc()).offset(skip).limit(limit)
+        query = query.order_by(ShoppingListInvite.created_at.desc()).offset(pagination.skip).limit(pagination.size)
         result = await self.db.execute(query)
         invites = result.scalars().all()
 
-        return list(invites), total
+        return PaginatedResponse(
+            data=[InvitationResponse.model_validate(i) for i in invites],
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )

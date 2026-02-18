@@ -7,16 +7,21 @@ from uuid import UUID
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import selectinload
 
-from app.common.constants import (
-    DEFAULT_PAGE_SIZE,
-)
+from app.core.pagination import PaginationParams
 from app.common.enums import MemberRole, NotificationType, UserRole
 from app.core.logging import get_logger
+from app.core.time import get_now
 from app.exceptions import ForbiddenException
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
-from app.schemas.shopping_list import ShoppingListCreate, ShoppingListUpdate
+from app.schemas.common import PaginatedResponse
+from app.schemas.shopping_list import (
+    ShoppingListCreate,
+    ShoppingListResponse,
+    ShoppingListSummaryResponse,
+    ShoppingListUpdate,
+)
 from app.services.notification_service import NotificationService
 from app.services.shopping_list.base import BaseListService
 
@@ -70,10 +75,9 @@ class ShoppingListService(BaseListService):
     async def get_user_lists(
         self,
         user: User,
-        skip: int = 0,
-        limit: int = DEFAULT_PAGE_SIZE,
+        pagination: PaginationParams,
         include_archived: bool = False,
-    ) -> tuple[list[ShoppingList], int]:
+    ) -> PaginatedResponse[ShoppingListSummaryResponse]:
         """Get shopping lists visible to the user."""
         self._block_super_admin(user)
 
@@ -97,22 +101,40 @@ class ShoppingListService(BaseListService):
                 )
                 .where(and_(*filter_cond))
                 .order_by(ShoppingList.created_at.desc())
-                .offset(skip)
-                .limit(limit)
+                .offset(pagination.skip)
+                .limit(pagination.size)
             )
             shopping_lists = result.scalars().all()
 
+            items = []
             for shopping_list in shopping_lists:
                 admin_membership = next(
                     (m for m in shopping_list.members if m.user_id == user.id and m.deleted_at is None), None
                 )
-                shopping_list.role = (
+                role = (
                     admin_membership.role.value
                     if admin_membership
                     else UserRole.TENANT_ADMIN.value
                 )
+                
+                items.append(
+                    ShoppingListSummaryResponse(
+                        id=shopping_list.id,
+                        name=shopping_list.name,
+                        role=role,
+                        item_count=len([i for i in shopping_list.items if i.deleted_at is None]),
+                        member_count=len([m for m in shopping_list.members if m.deleted_at is None]),
+                        created_at=shopping_list.created_at,
+                        deleted_at=shopping_list.deleted_at,
+                    )
+                )
 
-            return list(shopping_lists), total
+            return PaginatedResponse(
+                data=items,
+                total=total,
+                page=pagination.page,
+                size=pagination.size
+            )
         else:
 
             filter_cond = [
@@ -142,18 +164,33 @@ class ShoppingListService(BaseListService):
                 )
                 .where(and_(*filter_cond))
                 .order_by(ShoppingListMember.joined_at.desc())
-                .offset(skip)
-                .limit(limit)
+                .offset(pagination.skip)
+                .limit(pagination.size)
             )
             memberships = result.scalars().all()
 
-            lists = []
+            items = []
             for membership in memberships:
                 shopping_list = membership.shopping_list
-                shopping_list.role = membership.role.value
-                lists.append(shopping_list)
+                
+                items.append(
+                    ShoppingListSummaryResponse(
+                        id=shopping_list.id,
+                        name=shopping_list.name,
+                        role=membership.role.value,
+                        item_count=len([i for i in shopping_list.items if i.deleted_at is None]),
+                        member_count=len([m for m in shopping_list.members if m.deleted_at is None]),
+                        created_at=shopping_list.created_at,
+                        deleted_at=shopping_list.deleted_at,
+                    )
+                )
 
-            return lists, total
+            return PaginatedResponse(
+                data=items,
+                total=total,
+                page=pagination.page,
+                size=pagination.size
+            )
 
     async def update_list(
         self, list_id: UUID, user: User, data: ShoppingListUpdate
@@ -204,7 +241,7 @@ class ShoppingListService(BaseListService):
             list_id, user, require_owner_or_admin=True
         )
         self._check_not_deleted(shopping_list)
-        shopping_list.deleted_at = func.now()
+        shopping_list.deleted_at = get_now()
         await self.db.commit()
 
         logger.info("Shopping list deleted")

@@ -2,7 +2,6 @@
 Tenant Management Endpoints
 """
 
-from math import ceil
 from typing import Annotated
 from uuid import UUID
 
@@ -59,17 +58,7 @@ async def list_tenants(
     List all tenants.
     """
     tenant_service = TenantService(db)
-    items, total = await tenant_service.get_all_tenants(
-        skip=pagination.skip, limit=pagination.size
-    )
-
-    return PaginatedResponse(
-        data=items,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=ceil(total / pagination.size) if total > 0 else 1,
-    )
+    return await tenant_service.get_all_tenants(pagination)
 
 
 @router.get(

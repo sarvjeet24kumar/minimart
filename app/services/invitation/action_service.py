@@ -7,7 +7,7 @@ from uuid import UUID
 from jose import JWTError
 from sqlalchemy import and_, select
 
-from app.common.enums import InviteStatus, MemberRole, NotificationType
+from app.common.enums import InviteAction, InviteStatus, MemberRole, NotificationType
 from app.core.logging import get_logger
 from app.core.security import decode_invitation_token
 from app.core.time import get_now
@@ -22,15 +22,25 @@ from app.models.invitation import ShoppingListInvite
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
-from app.services.invitation.base import BaseInvitationService
+from app.schemas.common import MessageResponse
+from app.services.base import BaseService
 from app.services.notification_service import NotificationService
 
 
 logger = get_logger(__name__)
 
 
-class InvitationActionService(BaseInvitationService):
+class InvitationActionService(BaseService):
     """Handles accepting and rejecting invitations."""
+
+    async def respond_to_invitation(self, token: str, action: InviteAction, user: User) -> MessageResponse:
+        """Respond to an invitation (accept or reject)."""
+        if action == InviteAction.ACCEPT:
+            await self.accept_invitation(token, user)
+            return MessageResponse(message="Invitation accepted")
+        else:
+            await self.reject_invitation(token, user)
+            return MessageResponse(message="Invitation rejected")
 
     async def accept_invitation(self, token: str, user: User) -> ShoppingList:
         """Accept an invitation."""
@@ -62,7 +72,6 @@ class InvitationActionService(BaseInvitationService):
             logger.warning("Attempted to accept non-pending invitation")
             raise MiniMartException(
                 status_code=400,
-                code="INVITE_NOT_PENDING",
                 message=f"Invitation has already been {invite.status.value.lower()}.",
             )
 

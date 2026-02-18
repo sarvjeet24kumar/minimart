@@ -4,17 +4,19 @@ Notification Service
 
 import uuid
 from typing import Any
-from zoneinfo import ZoneInfo
+
 
 from sqlalchemy import and_, desc, func, not_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.constants import DEFAULT_PAGE_SIZE
+from app.core.pagination import PaginationParams
 from app.common.enums import NotificationType
-from app.core.config import settings
 from app.core.logging import get_logger
+from app.exceptions import NotFoundException
 from app.models.notification import Notification
 from app.models.shopping_list_member import ShoppingListMember
+from app.schemas.common import MessageResponse, PaginatedResponse
+from app.schemas.notification import NotificationResponse
 from app.websocket.manager import manager
 
 logger = get_logger(__name__)
@@ -60,7 +62,7 @@ class NotificationService:
                             "type": notification_type.value,
                             "data": notification.payload,
                             "list_id": str(notification.shopping_list_id) if notification.shopping_list_id else None,
-                            "created_at": notification.created_at.astimezone(ZoneInfo(settings.TIMEZONE)).isoformat(),
+                            "created_at": notification.created_at.isoformat(),
                         },
                     },
                 )
@@ -72,22 +74,34 @@ class NotificationService:
     async def get_user_notifications(
         self,
         user_id: uuid.UUID,
+        pagination: PaginationParams,
         is_read: bool | None = None,
-        limit: int = DEFAULT_PAGE_SIZE,
-        skip: int = 0,
-    ) -> list[Notification]:
+    ) -> PaginatedResponse[NotificationResponse]:
         """
         Get paginated notifications for a user with optional filter.
         """
-        query = select(Notification).where(Notification.user_id == user_id)
-        
+        base_filter = Notification.user_id == user_id
+        query = select(Notification).where(base_filter)
+        count_query = select(func.count(Notification.id)).where(base_filter)
+
         if is_read is not None:
             query = query.where(Notification.is_read == is_read)
-        
-        query = query.order_by(desc(Notification.created_at)).offset(skip).limit(limit)
-        
+            count_query = count_query.where(Notification.is_read == is_read)
+
+        query = query.order_by(desc(Notification.created_at)).offset(pagination.skip).limit(pagination.size)
+
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = list(result.scalars().all())
+
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar_one()
+
+        return PaginatedResponse(
+            data=[NotificationResponse.model_validate(i) for i in items],
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )
 
     async def get_unread_count(self, user_id: uuid.UUID) -> int:
         """Get the count of unread notifications for a user."""
@@ -97,7 +111,7 @@ class NotificationService:
         result = await self.db.execute(query)
         return result.scalar_one()
 
-    async def mark_as_read(self, notification_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    async def mark_as_read(self, notification_id: uuid.UUID, user_id: uuid.UUID) -> MessageResponse:
         """Mark a specific notification as read."""
         query = (
             update(Notification)
@@ -106,9 +120,12 @@ class NotificationService:
         )
         result = await self.db.execute(query)
         await self.db.commit()
-        return result.rowcount > 0
+        if result.rowcount == 0:
+            raise NotFoundException("Notification not found")
+        
+        return MessageResponse(message="Notification marked as read")
 
-    async def mark_all_as_read(self, user_id: uuid.UUID) -> int:
+    async def mark_all_as_read(self, user_id: uuid.UUID) -> MessageResponse:
         """Mark all notifications for a user as read."""
         query = (
             update(Notification)
@@ -117,7 +134,9 @@ class NotificationService:
         )
         result = await self.db.execute(query)
         await self.db.commit()
-        return result.rowcount
+        
+        count = result.rowcount
+        return MessageResponse(message=f"Marked {count} notifications as read")
 
     async def notify_list_members(
         self,

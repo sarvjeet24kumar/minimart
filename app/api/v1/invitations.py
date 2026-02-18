@@ -3,14 +3,13 @@ Invitation Endpoints
 
 """
 
-from math import ceil
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.enums import InviteAction
+
 from app.core.config import settings
 from app.core.dependencies import PaginationParams, get_current_verified_user
 from app.core.rate_limit import RateLimit
@@ -46,12 +45,7 @@ async def respond_to_invitation(
     Accept or reject a shopping list invitation.
     """
     action_service = InvitationActionService(db)
-    if data.action == InviteAction.ACCEPT:
-        await action_service.accept_invitation(data.token, current_user)
-        return MessageResponse(message="Invitation accepted")
-    else:
-        await action_service.reject_invitation(data.token, current_user)
-        return MessageResponse(message="Invitation rejected")
+    return await action_service.respond_to_invitation(data.token, data.action, current_user)
 
 
 @router.delete(
@@ -86,12 +80,8 @@ async def resend_invitation(
 
     """
     management_service = InvitationManagementService(db)
-    expires_at = await management_service.resend_invitation(
+    return await management_service.resend_invitation(
         invite_id, current_user, background_tasks
-    )
-    return InviteResponse(
-        message="Invitation resent successfully",
-        expires_at=expires_at,
     )
 
 
@@ -114,18 +104,10 @@ async def get_my_invites(
     Get all invitations for the current user across all lists.
     """
     management_service = InvitationManagementService(db)
-    invites, total = await management_service.get_my_invites(
+    return await management_service.get_my_invites(
         current_user,
+        pagination=pagination,
         status_filter=status_filter,
-        skip=pagination.skip,
-        limit=pagination.size,
-    )
-    return PaginatedResponse(
-        data=invites,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=ceil(total / pagination.size) if total > 0 else 1,
     )
 
 
@@ -145,12 +127,8 @@ async def invite_member(
     Invite a user to join the shopping list.
     """
     management_service = InvitationManagementService(db)
-    expires_at = await management_service.send_invitation(
+    return await management_service.send_invitation(
         list_id, data.user_id, current_user, background_tasks
-    )
-    return InviteResponse(
-        message="Invitation sent successfully",
-        expires_at=expires_at,
     )
 
 
@@ -174,17 +152,9 @@ async def get_list_invites(
     Get all invitations for a specific shopping list.
     """
     management_service = InvitationManagementService(db)
-    invites, total = await management_service.get_list_invites(
+    return await management_service.get_list_invites(
         list_id,
         current_user,
+        pagination=pagination,
         status_filter=status_filter,
-        skip=pagination.skip,
-        limit=pagination.size,
-    )
-    return PaginatedResponse(
-        data=invites,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=ceil(total / pagination.size) if total > 0 else 1,
     )

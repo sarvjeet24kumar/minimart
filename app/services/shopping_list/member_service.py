@@ -7,14 +7,15 @@ from uuid import UUID
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import selectinload
 
-from app.common.constants import (
-    DEFAULT_PAGE_SIZE,
-)
+from app.core.pagination import PaginationParams
 from app.core.logging import get_logger
+from app.core.time import get_now
 from app.exceptions import ForbiddenException, NotFoundException
 from app.models.shopping_list_member import ShoppingListMember
 from app.websocket.manager import manager
 from app.models.user import User
+from app.schemas.common import PaginatedResponse
+from app.schemas.shopping_list_member import MemberResponse
 from app.services.shopping_list.base import BaseListService
 
 logger = get_logger(__name__)
@@ -27,10 +28,9 @@ class ListMemberService(BaseListService):
         self,
         list_id: UUID,
         user: User,
-        skip: int = 0,
-        limit: int = DEFAULT_PAGE_SIZE,
+        pagination: PaginationParams,
         include_deleted: bool = False,
-    ) -> tuple[list[ShoppingListMember], int]:
+    ) -> PaginatedResponse[MemberResponse]:
         """Get all members of a shopping list."""
         await self._get_list_with_access(list_id, user)
 
@@ -47,12 +47,17 @@ class ListMemberService(BaseListService):
             select(ShoppingListMember)
             .options(selectinload(ShoppingListMember.user))
             .where(and_(*filter_cond))
-            .offset(skip)
-            .limit(limit)
+            .offset(pagination.skip)
+            .limit(pagination.size)
         )
         members = result.scalars().all()
 
-        return list(members), total
+        return PaginatedResponse(
+            data=[MemberResponse.model_validate(m) for m in members],
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )
 
     async def remove_member(
         self, list_id: UUID, member_user_id: UUID, user: User
@@ -79,7 +84,7 @@ class ListMemberService(BaseListService):
         if not membership or membership.deleted_at:
             raise NotFoundException("Member not found")
 
-        membership.deleted_at = func.now()
+        membership.deleted_at = get_now()
         await self.db.commit()
 
         # Kick user from chat immediately

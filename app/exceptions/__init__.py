@@ -3,7 +3,6 @@ Exceptions Package
 """
 
 from app.exceptions.auth import (
-    CredentialsException,
     EmailNotVerifiedException,
     ForbiddenException,
     InvitationAlreadyUsedException,
@@ -22,7 +21,6 @@ from app.exceptions.validation import ValidationException
 __all__ = [
     "MiniMartException",
     "UnauthorizedException",
-    "CredentialsException",
     "ForbiddenException",
     "EmailNotVerifiedException",
     "InvitationExpiredException",

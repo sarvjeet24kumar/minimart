@@ -32,7 +32,6 @@ def validate_password_strength(password: str) -> None:
 
     raise MiniMartException(
         status_code=400,
-        code="WEAK_PASSWORD",
         message="Password does not meet security requirements.",
         details={
             "password": [

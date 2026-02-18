@@ -58,7 +58,4 @@ class ItemResponse(NormalizedModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ItemStatusUpdate(BaseModel):
-    """Quick status update schema."""
 
-    status: ItemStatus

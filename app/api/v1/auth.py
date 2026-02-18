@@ -14,7 +14,6 @@ from app.core.config import settings
 from app.core.dependencies import get_current_user, get_tenant_id
 from app.core.rate_limit import RateLimit
 from app.db.session import get_db
-from app.exceptions import ValidationException
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -70,18 +69,12 @@ async def signup(
     """
     Register a new user account.
     """
-    if not tenant_id:
-        from app.exceptions import ValidationException
-
-        raise ValidationException("Tenant-ID header is required")
-
     auth_service = AuthService(db)
-    await auth_service.signup(
+    return await auth_service.signup(
         **data.model_dump(),
         tenant_id=tenant_id,
         background_tasks=background_tasks,
     )
-    return MessageResponse(message="Signup successful. Please verify your email.")
 
 
 @router.post(
@@ -100,8 +93,7 @@ async def logout(
     """
     auth_service = AuthService(db)
     access_token = credentials.credentials
-    await auth_service.logout(access_token, data.refresh_token)
-    return MessageResponse(message="Logged out successfully")
+    return await auth_service.logout(access_token, data.refresh_token)
 
 
 @router.post(
@@ -117,12 +109,8 @@ async def verify_email(
     """
     Verify email address using OTP.
     """
-    if not tenant_id:
-        raise ValidationException("Tenant-ID header is required")
-
     auth_service = AuthService(db)
-    await auth_service.verify_email(**data.model_dump(), tenant_id=tenant_id)
-    return MessageResponse(message="Email verified successfully")
+    return await auth_service.verify_email(**data.model_dump(), tenant_id=tenant_id)
 
 
 @router.post(
@@ -139,15 +127,8 @@ async def resend_otp(
     """
     Resend OTP for email verification.
     """
-    if not tenant_id:
-        raise ValidationException("Tenant-ID header is required ")
-
     auth_service = AuthService(db)
-    await auth_service.send_verification_otp(data.email, tenant_id, background_tasks)
-    return OTPResponse(
-        message="OTP sent successfully",
-        expires_in=settings.OTP_EXPIRE_MINUTES * 60,
-    )
+    return await auth_service.send_verification_otp(data.email, tenant_id, background_tasks)
 
 
 @router.post(
@@ -163,13 +144,7 @@ async def refresh_tokens(
     Refresh access and refresh tokens.
     """
     auth_service = AuthService(db)
-    access_token, refresh_token = await auth_service.refresh_tokens(data.refresh_token)
-    return LoginResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="Bearer",
-        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
+    return await auth_service.refresh_tokens(data.refresh_token)
 
 
 @router.post(
@@ -186,10 +161,9 @@ async def change_password(
     Change current user's password.
     """
     auth_service = AuthService(db)
-    await auth_service.change_password(
+    return await auth_service.change_password(
         current_user, data.current_password, data.new_password
     )
-    return MessageResponse(message="Password changed successfully")
 
 
 @router.post(
@@ -207,10 +181,7 @@ async def forgot_password(
     Request a password reset link via email.
     """
     auth_service = AuthService(db)
-    await auth_service.forgot_password(data.email, tenant_id, background_tasks)
-    return MessageResponse(
-        message="If an account with that email exists, a password reset link has been sent."
-    )
+    return await auth_service.forgot_password(data.email, tenant_id, background_tasks)
 
 
 @router.post(
@@ -226,7 +197,7 @@ async def reset_password(
     Reset password using a valid reset token.
     """
     auth_service = AuthService(db)
-    await auth_service.reset_password(
+    return await auth_service.reset_password(
         data.token, data.new_password, data.confirm_password
     )
-    return MessageResponse(message="Password has been reset successfully")
+

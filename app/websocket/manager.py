@@ -8,6 +8,7 @@ Simplified for single-server deployment.
 import json
 from uuid import UUID
 
+from app.common.constants import WS_CLOSE_AUTH_FAILED, WS_CLOSE_FORBIDDEN
 from fastapi import WebSocket
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession

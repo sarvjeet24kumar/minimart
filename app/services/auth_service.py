@@ -4,10 +4,9 @@ Authentication Service
 """
 
 import hmac
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks
 from jose import JWTError, jwt
@@ -41,7 +40,11 @@ from app.exceptions.base import MiniMartException
 from app.models.tenant import Tenant
 from app.models.token_blacklist import BlacklistedToken
 from app.models.user import User
-from app.schemas.auth import LoginResponse
+from app.schemas.auth import (
+    LoginResponse,
+    OTPResponse,
+)
+from app.schemas.common import MessageResponse
 from app.services.email_service import EmailService
 from app.services.redis_service import RedisService
 from app.utils.password import validate_password_strength
@@ -127,10 +130,12 @@ class AuthService:
         email: str,
         tenant_id: UUID | None = None,
         background_tasks: BackgroundTasks | None = None,
-    ) -> None:
+    ) -> OTPResponse:
         """
         Send OTP for email verification scoped by tenant.
         """
+        if not tenant_id:
+            raise ValidationException("Tenant-ID header is required")
         email = email.strip().lower()
         result = await self.db.execute(
             select(User).where(
@@ -145,12 +150,15 @@ class AuthService:
 
         if not user:
             logger.info("Verification OTP requested for non-existent user")
-            return
+            # Returning success to prevent email enumeration
+            return OTPResponse(
+                message="OTP sent successfully",
+                expires_in=settings.OTP_EXPIRE_MINUTES * 60,
+            )
 
         if user.is_email_verified:
             raise MiniMartException(
                 status_code=400,
-                code="ALREADY_VERIFIED",
                 message="Account is already verified.",
             )
 
@@ -167,11 +175,19 @@ class AuthService:
             await EmailService.send_otp_email(email, otp)
 
         logger.info("Verification OTP sent")
+        return OTPResponse(
+            message="OTP sent successfully",
+            expires_in=settings.OTP_EXPIRE_MINUTES * 60,
+        )
 
-    async def verify_email(self, email: str, otp: str, tenant_id: UUID) -> bool:
+    async def verify_email(
+        self, email: str, otp: str, tenant_id: UUID
+    ) -> MessageResponse:
         """
         Verify email with OTP scoped by tenant.
         """
+        if not tenant_id:
+            raise ValidationException("Tenant-ID header is required")
         result = await self.db.execute(
             select(User).where(and_(User.email == email, User.tenant_id == tenant_id))
         )
@@ -183,7 +199,6 @@ class AuthService:
         if user.is_email_verified:
             raise MiniMartException(
                 status_code=400,
-                code="ALREADY_VERIFIED",
                 message="Account is already verified.",
             )
 
@@ -204,7 +219,7 @@ class AuthService:
         logger.info("Email verified successfully")
         await RedisService.delete_otp(email, tenant_id)
 
-        return True
+        return MessageResponse(message="Email verified successfully")
 
     async def signup(
         self,
@@ -215,10 +230,12 @@ class AuthService:
         password: str,
         tenant_id: UUID | None = None,
         background_tasks: Optional["BackgroundTasks"] = None,
-    ) -> bool:
+    ) -> MessageResponse:
         """
         Register a new user with email verification.
         """
+        if not tenant_id:
+            raise ValidationException("Tenant-ID header is required")
         validate_password_strength(password)
 
         if tenant_id:
@@ -263,13 +280,13 @@ class AuthService:
 
         logger.info("New user signup successful")
         await self.send_verification_otp(email, tenant_id, background_tasks)
-        return True
+        return MessageResponse(message="Signup successful. Please verify your email.")
 
     async def logout(
         self,
         access_token: str,
         refresh_token: str,
-    ) -> None:
+    ) -> MessageResponse:
         """
         Logout user by blacklisting both access and refresh tokens.
         """
@@ -302,7 +319,7 @@ class AuthService:
 
             if not existing:
                 expires_at = datetime.fromtimestamp(
-                    refresh_payload["exp"], tz=ZoneInfo(settings.TIMEZONE)
+                    refresh_payload["exp"], tz=timezone.utc
                 )
 
                 blacklisted = BlacklistedToken(
@@ -315,8 +332,9 @@ class AuthService:
 
         logger.info("User logged out")
         await manager.disconnect_all_for_user(str(user_id))
+        return MessageResponse(message="Logged out successfully")
 
-    async def refresh_tokens(self, refresh_token: str) -> tuple[str, str]:
+    async def refresh_tokens(self, refresh_token: str) -> LoginResponse:
 
         try:
             payload = jwt.decode(
@@ -345,7 +363,9 @@ class AuthService:
 
         if not user or not (user.is_active and not user.deleted_at):
             logger.warning("Token refresh failed: User not found, inactive, or deleted")
-            raise UnauthorizedException("User not found or User account is inactive or deleted")
+            raise UnauthorizedException(
+                "User not found or User account is inactive or deleted"
+            )
 
         access_token = create_access_token(
             user_id=user.id,
@@ -354,11 +374,11 @@ class AuthService:
             email=user.email,
         )
 
-        return access_token, refresh_token
+        return LoginResponse(access_token=access_token, refresh_token=refresh_token)
 
     async def change_password(
         self, user: User, current_password: str, new_password: str
-    ) -> bool:
+    ) -> MessageResponse:
         """
         Change user's password with strength validation.
         """
@@ -368,7 +388,6 @@ class AuthService:
         if verify_password(new_password, user.password):
             raise MiniMartException(
                 status_code=400,
-                code="PASSWORD_SAME",
                 message="New password must be different from your current password.",
             )
 
@@ -378,14 +397,14 @@ class AuthService:
 
         await self.db.commit()
         logger.info("Password changed sucessfully")
-        return True
+        return MessageResponse(message="Password changed successfully")
 
     async def forgot_password(
         self,
         email: str,
         tenant_id: UUID | None = None,
         background_tasks: BackgroundTasks | None = None,
-    ) -> None:
+    ) -> MessageResponse:
         """
         Request password reset. Sends email with reset link.
         """
@@ -402,7 +421,9 @@ class AuthService:
         user = result.scalar_one_or_none()
         if not user:
             logger.info("Password reset requested for non-existent user")
-            return
+            return MessageResponse(
+                message="If an account with that email exists, a password reset link has been sent."
+            )
 
         token = create_password_reset_token(user.id, user.tenant_id)
         payload = decode_token(token)
@@ -421,17 +442,19 @@ class AuthService:
             await EmailService.send_password_reset_email(user.email, reset_url)
 
         logger.info("Password reset link sent")
+        return MessageResponse(
+            message="If an account with that email exists, a password reset link has been sent."
+        )
 
     async def reset_password(
         self, token: str, new_password: str, confirm_password: str
-    ) -> bool:
+    ) -> MessageResponse:
         """
         Reset password using a valid reset token.
         """
         if new_password != confirm_password:
             raise MiniMartException(
                 status_code=400,
-                code="PASSWORD_MISMATCH",
                 message="Passwords do not match.",
                 details={"confirm_password": ["Must match new_password."]},
             )
@@ -442,7 +465,6 @@ class AuthService:
         except JWTError as e:
             raise MiniMartException(
                 status_code=400,
-                code="INVALID_RESET_TOKEN",
                 message="Password reset token is invalid or has expired.",
             ) from e
 
@@ -453,7 +475,6 @@ class AuthService:
         if not stored_jti or stored_jti != jti:
             raise MiniMartException(
                 status_code=400,
-                code="INVALID_RESET_TOKEN",
                 message="Password reset link is invalid or has expired.",
             )
 
@@ -469,4 +490,5 @@ class AuthService:
         logger.info("Password reset successful")
         await RedisService.delete_password_reset_jti(user_id)
 
-        return True
+        return MessageResponse(message="Password has been reset successfully")
+

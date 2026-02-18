@@ -16,24 +16,16 @@ from app.exceptions import ForbiddenException, NotFoundException
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_member import ShoppingListMember
 from app.models.user import User
+from app.services.base import BaseService
 
 
 logger = get_logger(__name__)
 
 
-class BaseListService:
+class BaseListService(BaseService):
     """Foundational class for shopping list-related services."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
 
-    def _block_super_admin(self, user: User) -> None:
-        """Block Super Admin from all shopping list operations."""
-        if user.role == UserRole.SUPER_ADMIN:
-            logger.warning("Super Admin attempted shopping list operation")
-            raise ForbiddenException(
-                "Super Admin cannot access shopping list operations"
-            )
 
     async def _get_list_with_access(
         self,

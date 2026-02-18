@@ -2,7 +2,6 @@
 Item Endpoints
 """
 
-from math import ceil
 from typing import Annotated
 from uuid import UUID
 
@@ -17,8 +16,9 @@ from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
-from app.schemas.item import ItemCreate, ItemResponse, ItemStatusUpdate, ItemUpdate
+from app.schemas.item import ItemCreate, ItemResponse, ItemUpdate
 from app.services.shopping_list import ListItemService
+
 
 logger = get_logger(__name__)
 
@@ -60,16 +60,8 @@ async def get_items(
     Get all items in a shopping list.
     """
     item_service = ListItemService(db)
-    items, total = await item_service.get_items(
-        list_id, current_user, skip=pagination.skip, limit=pagination.size, status=status
-    )
-
-    return PaginatedResponse(
-        data=items,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=ceil(total / pagination.size) if total > 0 else 1,
+    return await item_service.get_items(
+        list_id, current_user, pagination, status=status
     )
 
 
@@ -111,26 +103,6 @@ async def update_item(
     return await item_service.update_item_scoped(list_id, item_id, current_user, data)
 
 
-@router.patch(
-    "/{list_id}/items/{item_id}/status",
-    response_model=ItemResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def update_item_status(
-    list_id: UUID,
-    item_id: UUID,
-    data: ItemStatusUpdate,
-    current_user: Annotated[User, Depends(get_current_verified_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    """
-    Quick update for item status (mark as purchased/pending).
-    """
-    item_service = ListItemService(db)
-    from app.schemas.item import ItemUpdate
-    return await item_service.update_item_scoped(
-        list_id, item_id, current_user, ItemUpdate(status=data.status)
-    )
 
 
 @router.delete("/{list_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

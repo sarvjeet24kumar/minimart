@@ -6,15 +6,14 @@ from uuid import UUID
 
 from sqlalchemy import and_, func, select
 
-from app.common.constants import (
-    DEFAULT_PAGE_SIZE,
-)
+from app.core.pagination import PaginationParams
 from app.common.enums import ItemStatus, NotificationType
 from app.core.logging import get_logger
 from app.exceptions import ConflictException, NotFoundException, ValidationException
 from app.models.item import Item
 from app.models.user import User
-from app.schemas.item import ItemCreate, ItemUpdate
+from app.schemas.common import PaginatedResponse
+from app.schemas.item import ItemCreate, ItemResponse, ItemUpdate
 from app.services.notification_service import NotificationService
 from app.services.shopping_list.base import BaseListService
 
@@ -74,10 +73,9 @@ class ListItemService(BaseListService):
         self,
         list_id: UUID,
         user: User,
-        skip: int = 0,
-        limit: int = DEFAULT_PAGE_SIZE,
+        pagination: PaginationParams,
         status: ItemStatus | None = None,
-    ) -> tuple[list[Item], int]:
+    ) -> PaginatedResponse[ItemResponse]:
         """Get all items in a shopping list."""
         shopping_list, membership = await self._get_list_with_access(list_id, user)
         self._check_item_permission(user, membership, "can_view")
@@ -95,12 +93,17 @@ class ListItemService(BaseListService):
             select(Item)
             .where(and_(*conditions))
             .order_by(Item.created_at)
-            .offset(skip)
-            .limit(limit)
+            .offset(pagination.skip)
+            .limit(pagination.size)
         )
         items = result.scalars().all()
 
-        return list(items), total
+        return PaginatedResponse(
+            data=[ItemResponse.model_validate(i) for i in items],
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )
 
     async def get_item(self, list_id: UUID, item_id: UUID, user: User) -> Item:
         """Get a specific item ensuring it belongs to the given list."""
@@ -118,9 +121,10 @@ class ListItemService(BaseListService):
 
         return item
 
-    async def update_item(self, item_id: UUID, user: User, data: ItemUpdate) -> Item:
+    async def update_item(
+        self, item_id: UUID, user: User, data: ItemUpdate
+    ) -> Item:
         """Update an item (standalone)."""
-        self._block_super_admin(user)
 
         result = await self.db.execute(
             select(Item).where(and_(Item.id == item_id, Item.deleted_at.is_(None)))
@@ -176,7 +180,6 @@ class ListItemService(BaseListService):
 
     async def delete_item(self, item_id: UUID, user: User) -> bool:
         """Delete an item (standalone)."""
-        self._block_super_admin(user)
 
         result = await self.db.execute(
             select(Item).where(and_(Item.id == item_id, Item.deleted_at.is_(None)))
@@ -209,13 +212,33 @@ class ListItemService(BaseListService):
         return True
 
     async def update_item_scoped(
-        self, list_id: UUID, item_id: UUID, user: User, data
+        self, list_id: UUID, item_id: UUID, user: User, data: ItemUpdate
     ) -> Item:
         """Update an item ensuring it belongs to the given list."""
+        self._block_super_admin(user)
+        result = await self.db.execute(
+            select(Item).where(and_(Item.id == item_id, Item.deleted_at.is_(None)))
+        )
+        item = result.scalar_one_or_none()
+
+        if not item or item.shopping_list_id != list_id:
+            logger.warning("Item not found in list")
+            raise NotFoundException("Item not found")
+
         return await self.update_item(item_id, user, data)
 
     async def delete_item_scoped(
         self, list_id: UUID, item_id: UUID, user: User
     ) -> bool:
         """Delete an item ensuring it belongs to the given list."""
+        self._block_super_admin(user)
+        result = await self.db.execute(
+            select(Item).where(and_(Item.id == item_id, Item.deleted_at.is_(None)))
+        )
+        item = result.scalar_one_or_none()
+
+        if not item or item.shopping_list_id != list_id:
+            logger.warning("Item not found in list")
+            raise NotFoundException("Item not found")
+
         return await self.delete_item(item_id, user)

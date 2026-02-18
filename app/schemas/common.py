@@ -2,10 +2,12 @@
 Common Schemas
 """
 
+from math import ceil
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.common.constants import NORMALIZATION_BYPASS_FIELDS
+
 
 T = TypeVar("T")
 
@@ -42,8 +44,14 @@ class PaginatedResponse(BaseModel, Generic[T]):
     total: int = Field(..., description="Total number of items")
     page: int = Field(..., description="Current page number (1-based)")
     size: int = Field(..., description="Number of items per page")
-    pages: int = Field(..., description="Total number of pages")
+    pages: int = Field(default=0, description="Total number of pages")
     data: list[T]
+
+    @model_validator(mode="after")
+    def compute_pages(self) -> "PaginatedResponse":
+        if self.pages == 0:
+            self.pages = ceil(self.total / self.size) if self.total > 0 else 1
+        return self
 
     model_config = ConfigDict(from_attributes=True)
 

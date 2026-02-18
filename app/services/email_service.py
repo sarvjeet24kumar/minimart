@@ -25,13 +25,13 @@ class EmailService:
     ) -> bool:
         """
         Send an email.
-        
+
         Args:
             to_email: Recipient email address
             subject: Email subject
             body: Plain text body
             html_body: Optional HTML body
-        
+
         Returns:
             bool: True if sent successfully
         """
@@ -111,7 +111,6 @@ The MiniMart Team
 </html>
         """.strip()
 
-        logger.info("Sending OTP verification email")
         return await cls.send_email(to_email, subject, body, html_body)
 
     @classmethod
@@ -125,14 +124,14 @@ The MiniMart Team
     ) -> bool:
         """
         Send shopping list invitation email.
-        
+
         Args:
             to_email: Recipient email
             inviter_name: Name of the person who invited
             list_name: Name of the shopping list
             accept_url: URL to accept the invitation
             reject_url: URL to reject the invitation
-        
+
         Returns:
             bool: True if sent successfully
         """
