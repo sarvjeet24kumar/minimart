@@ -115,6 +115,7 @@ def generate_otp(length: int | None = None) -> str:
 
 
 def create_invitation_token(
+    invite_id: UUID,
     list_id: UUID,
     email: str,
     tenant_id: UUID | None,
@@ -134,6 +135,7 @@ def create_invitation_token(
 
     payload = {
         "type": "list_invite",
+        "invite_id": str(invite_id),
         "list_id": str(list_id),
         "email": email,
         "tenant_id": str(tenant_id),

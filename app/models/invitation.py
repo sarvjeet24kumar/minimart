@@ -31,7 +31,6 @@ class ShoppingListInvite(BaseModel):
         Index("idx_invites_invited_user_id", "invited_user_id"),
         Index("idx_invites_invited_by_user_id", "invited_by_user_id"),
         Index("idx_invites_status", "status"),
-        Index("idx_invites_token", "token", unique=True),
     )
 
     shopping_list_id: Mapped[uuid.UUID] = mapped_column(
@@ -49,7 +48,6 @@ class ShoppingListInvite(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    token: Mapped[str] = mapped_column(String(MAX_LENGTH_TOKEN), unique=True, nullable=False)
     status: Mapped[InviteStatus] = mapped_column(
         ENUM(InviteStatus, name="invite_status", create_type=True),
         default=InviteStatus.PENDING,

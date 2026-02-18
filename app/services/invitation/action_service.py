@@ -25,6 +25,7 @@ from app.models.user import User
 from app.schemas.common import MessageResponse
 from app.services.base import BaseService
 from app.services.notification_service import NotificationService
+from app.services.redis_service import RedisService
 
 
 logger = get_logger(__name__)
@@ -42,8 +43,8 @@ class InvitationActionService(BaseService):
             await self.reject_invitation(token, user)
             return MessageResponse(message="Invitation rejected")
 
-    async def accept_invitation(self, token: str, user: User) -> ShoppingList:
-        """Accept an invitation."""
+    async def _get_valid_invite(self, token: str, user: User) -> tuple[ShoppingListInvite, dict]:
+        """Internal helper to validate token and fetch a pending invitation."""
         self._block_super_admin(user)
         try:
             payload = decode_invitation_token(token)
@@ -56,11 +57,14 @@ class InvitationActionService(BaseService):
             raise ForbiddenException("Invalid Token")
 
         if UUID(payload["tenant_id"]) != user.tenant_id:
-            logger.warning("Cross-tenant invitation accept attempt denied")
+            logger.warning("Cross-tenant invitation attempt denied")
             raise ForbiddenException("Cross-tenant invitation not allowed")
 
+        # Lookup by unique invitation ID from payload
         result = await self.db.execute(
-            select(ShoppingListInvite).where(ShoppingListInvite.token == token)
+            select(ShoppingListInvite).where(
+                ShoppingListInvite.id == UUID(payload["invite_id"])
+            )
         )
         invite = result.scalar_one_or_none()
 
@@ -69,7 +73,7 @@ class InvitationActionService(BaseService):
             raise ValidationException("Invitation not found")
 
         if invite.status != InviteStatus.PENDING:
-            logger.warning("Attempted to accept non-pending invitation")
+            logger.warning(f"Attempted to process non-pending invitation: {invite.status}")
             raise MiniMartException(
                 status_code=400,
                 message=f"Invitation has already been {invite.status.value.lower()}.",
@@ -79,8 +83,19 @@ class InvitationActionService(BaseService):
             logger.info("Invitation has expired")
             invite.status = InviteStatus.EXPIRED
             await self.db.commit()
+            await RedisService.invalidate_invitation_token(payload["jti"])
             raise ValidationException("Invitation has expired")
 
+        # Redis Validation (Single-use enforcement)
+        if not await RedisService.validate_invitation_token(payload["jti"]):
+            logger.warning("Invitation token not found in Redis or already used")
+            raise ValidationException("Invitation token is invalid or has already been used")
+
+        return invite, payload
+
+    async def accept_invitation(self, token: str, user: User) -> ShoppingList:
+        """Accept an invitation."""
+        invite, payload = await self._get_valid_invite(token, user)
         list_id = invite.shopping_list_id
 
         result = await self.db.execute(
@@ -95,6 +110,7 @@ class InvitationActionService(BaseService):
         if shopping_list.deleted_at:
             raise ForbiddenException("This list is deleted. You cannot join it.")
 
+        # Check existing membership
         result = await self.db.execute(
             select(ShoppingListMember).where(
                 and_(
@@ -107,6 +123,7 @@ class InvitationActionService(BaseService):
             invite.status = InviteStatus.ACCEPTED
             invite.accepted_at = get_now()
             await self.db.commit()
+            await RedisService.invalidate_invitation_token(payload["jti"])
             raise ConflictException("User is already a member of this list")
 
         membership = ShoppingListMember(
@@ -119,55 +136,36 @@ class InvitationActionService(BaseService):
         invite.status = InviteStatus.ACCEPTED
         invite.accepted_at = get_now()
         await self.db.commit()
-        
-        logger.info("Invitation accepted successfully")
+        await RedisService.invalidate_invitation_token(payload["jti"])
 
-        # Notify existing list members about the new member
+        # Notify existing list members
         notification_service = NotificationService(self.db)
         await notification_service.notify_list_members(
             list_id=list_id,
             notification_type=NotificationType.INVITE_ACCEPTED,
-            payload={
-                "user": user.username,
-                "list_name": shopping_list.name,
-            },
+            payload={"user": user.username, "list_name": shopping_list.name},
             exclude_user_id=user.id,
         )
 
+        logger.info("Invitation accepted successfully")
         await self.db.refresh(shopping_list)
         return shopping_list
 
     async def reject_invitation(self, token: str, user: User) -> bool:
         """Reject an invitation."""
-        self._block_super_admin(user)
         try:
-            decode_invitation_token(token)
-        except JWTError:
-            logger.warning("Invalid token for invitation rejection")
-            return True
-
-        result = await self.db.execute(
-            select(ShoppingListInvite).where(ShoppingListInvite.token == token)
-        )
-        invite = result.scalar_one_or_none()
-
-        if not invite or invite.status != InviteStatus.PENDING:
-            logger.info("Invitation not found or not pending for rejection")
-            return True
-
-        if invite.expires_at < get_now():
-            logger.info("Invitation has expired (reject attempt)")
-            invite.status = InviteStatus.EXPIRED
-            await self.db.commit()
+            invite, payload = await self._get_valid_invite(token, user)
+        except (ValidationException, ForbiddenException, MiniMartException):
+            # For reject, we can be more lenient if it's already processed or invalid
+            logger.info("Skipping rejection: Token already processed or invalid")
             return True
 
         invite.status = InviteStatus.REJECTED
         invite.rejected_at = get_now()
         await self.db.commit()
-        
-        logger.info("Invitation rejected")
+        await RedisService.invalidate_invitation_token(payload["jti"])
 
-        # Notify existing list members about the rejection
+        # Notify existing list members
         result = await self.db.execute(
             select(ShoppingList).where(ShoppingList.id == invite.shopping_list_id)
         )
@@ -177,11 +175,9 @@ class InvitationActionService(BaseService):
             await notification_service.notify_list_members(
                 list_id=invite.shopping_list_id,
                 notification_type=NotificationType.INVITE_REJECTED,
-                payload={
-                    "user": user.username,
-                    "list_name": shopping_list.name,
-                },
+                payload={"user": user.username, "list_name": shopping_list.name},
                 exclude_user_id=user.id,
             )
 
+        logger.info("Invitation rejected successfully")
         return True
