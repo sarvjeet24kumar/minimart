@@ -37,6 +37,13 @@ class InviteStatus(enum.StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class InviteAction(enum.StrEnum):
+    """Actions for responding to an invitation."""
+
+    ACCEPT = "accept"
+    REJECT = "reject"
+
+
 class NotificationType(enum.StrEnum):
     """Types of notifications."""
 

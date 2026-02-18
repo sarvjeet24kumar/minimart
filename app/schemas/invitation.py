@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.common.constants import MAX_LENGTH_TOKEN, MIN_LENGTH_TOKEN, MSG_INVITE_SENT
-from app.common.enums import InviteStatus
+from app.common.enums import InviteAction, InviteStatus
 from app.schemas.common import NormalizedModel
 
 
@@ -25,14 +25,10 @@ class InviteResponse(BaseModel):
     expires_at: datetime
 
 
-class InvitationAcceptRequest(NormalizedModel):
-    """Accept invitation request."""
+class InvitationRespondRequest(NormalizedModel):
+    """Accept or reject an invitation."""
     token: str = Field(..., min_length=MIN_LENGTH_TOKEN, max_length=MAX_LENGTH_TOKEN)
-
-
-class InvitationRejectRequest(NormalizedModel):
-    """Reject invitation request."""
-    token: str = Field(..., min_length=MIN_LENGTH_TOKEN, max_length=MAX_LENGTH_TOKEN)
+    action: InviteAction
 
 
 class InvitationResponse(BaseModel):

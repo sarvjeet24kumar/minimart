@@ -8,8 +8,7 @@ from app.schemas.auth import (
     VerifyEmailRequest,
 )
 from app.schemas.invitation import (
-    InvitationAcceptRequest,
-    InvitationRejectRequest,
+    InvitationRespondRequest,
     InvitationResponse,
     InviteRequest,
     InviteResponse,
@@ -75,8 +74,7 @@ __all__ = [
     "ItemUpdate",
     "ItemResponse",
     # Invitation
-    "InvitationAcceptRequest",
-    "InvitationRejectRequest",
+    "InvitationRespondRequest",
     "InvitationResponse",
     # Notification
     "NotificationFilter",

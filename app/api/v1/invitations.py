@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.enums import InviteAction
 from app.core.config import settings
 from app.core.dependencies import PaginationParams, get_current_verified_user
 from app.core.rate_limit import RateLimit
@@ -17,8 +18,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.invitation import (
-    InvitationAcceptRequest,
-    InvitationRejectRequest,
+    InvitationRespondRequest,
     InvitationResponse,
     InviteRequest,
     InviteResponse,
@@ -33,39 +33,25 @@ list_router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_API,
 
 
 @router.post(
-    "/accept",
+    "/respond",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
 )
-async def accept_invitation(
-    data: InvitationAcceptRequest,
+async def respond_to_invitation(
+    data: InvitationRespondRequest,
     current_user: Annotated[User, Depends(get_current_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
-    Accept a shopping list invitation.
+    Accept or reject a shopping list invitation.
     """
     action_service = InvitationActionService(db)
-    await action_service.accept_invitation(data.token, current_user)
-    return MessageResponse(message="Invitation accepted")
-
-
-@router.post(
-    "/reject",
-    response_model=MessageResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def reject_invitation(
-    data: InvitationRejectRequest,
-    current_user: Annotated[User, Depends(get_current_verified_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    """
-    Reject a shopping list invitation.
-    """
-    action_service = InvitationActionService(db)
-    await action_service.reject_invitation(data.token, current_user)
-    return MessageResponse(message="Invitation rejected")
+    if data.action == InviteAction.ACCEPT:
+        await action_service.accept_invitation(data.token, current_user)
+        return MessageResponse(message="Invitation accepted")
+    else:
+        await action_service.reject_invitation(data.token, current_user)
+        return MessageResponse(message="Invitation rejected")
 
 
 @router.delete(

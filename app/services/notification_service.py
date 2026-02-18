@@ -126,9 +126,12 @@ class NotificationService:
         notification_type: NotificationType,
         payload: dict[str, Any],
         exclude_user_id: uuid.UUID | None = None,
+        skip_dedup: bool = False,
     ) -> int:
         """
         Notify all members of a shopping list about an event.
+        If skip_dedup is True, notifications are delivered to all connections
+        regardless of subscription state (use for notification-only events like invitations).
         """
         result = await self.db.execute(
             select(ShoppingListMember.user_id).where(
@@ -149,7 +152,7 @@ class NotificationService:
                 user_id=user_id,
                 notification_type=notification_type,
                 payload=payload,
-                shopping_list_id=list_id,
+                shopping_list_id=None if skip_dedup else list_id,
                 send_websocket=True,
             )
             count += 1

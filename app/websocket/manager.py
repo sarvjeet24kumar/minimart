@@ -59,8 +59,8 @@ class ConnectionManager:
     ) -> bool:
         """
         Subscribe a specific connection (or all user's connections if websocket is None) to a list.
-        Tenant Admins can subscribe to any list within their tenant without membership.
-        """
+        # Tenant Admins can subscribe to any list within their tenant without membership.
+        # """
         # Check if user is a Tenant Admin in the same tenant as the list
         user_result = await db.execute(select(User).where(User.id == UUID(user_id)))
         user = user_result.scalar_one_or_none()
