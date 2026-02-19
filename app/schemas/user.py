@@ -74,7 +74,6 @@ class UserResponse(NormalizedModel):
     last_name: str
     role: UserRole
 
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -91,9 +90,7 @@ class UserAdminResponse(UserResponse):
 class ChangePasswordRequest(NormalizedModel):
     """Change password request."""
 
-    current_password: str = Field(
-        ..., min_length=1
-    )  # Keeping this as 1 for existing logins
+    current_password: str = Field(..., min_length=MIN_LENGTH_PASSWORD)
     new_password: str = Field(
         ..., min_length=MIN_LENGTH_PASSWORD, max_length=MAX_LENGTH_PASSWORD_RAW
     )
