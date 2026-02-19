@@ -40,20 +40,13 @@ if settings.is_development:
 async def _authenticate_ws(
     websocket: WebSocket, token: str, db: AsyncSession
 ) -> User | None:
-    """
-    Shared WebSocket authentication helper.
 
-    Decodes token, checks blacklist, loads user, verifies active status.
-    Closes the WebSocket with WS_CLOSE_AUTH_FAILED and returns None on failure.
-    Returns the authenticated User on success.
-    """
     try:
         payload = decode_token(token)
         if payload.get("type") != "access":
             await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Invalid token type")
             return None
 
-        # Check if token is blacklisted (logout)
         token_id = payload.get("jti")
         if token_id and await RedisService.is_access_token_blacklisted(token_id):
             await websocket.close(code=WS_CLOSE_AUTH_FAILED, reason="Token revoked")

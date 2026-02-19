@@ -21,9 +21,7 @@ from app.models.user import User
 
 class ConnectionManager:
     """
-    Manages WebSocket connections for:
-    1. Notifications — sent to global-scoped connections (list members only)
-    2. Chat — sent to chat-scoped connections (list members + tenant admins)
+    Manages WebSocket connections
     """
 
     def __init__(self):
