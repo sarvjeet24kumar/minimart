@@ -18,24 +18,19 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
         
-        # Generate or extract request_id
         request_id = request.headers.get("Request-ID", str(uuid.uuid4())[:8])
         
-        # Extract tenant_id from JWT
         tenant_id = "N/A"
         auth_header = request.headers.get("Authorization")
         
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
             try:
-                # We decode without strict validation here just to get the ID for logs
-                # Proper validation is handled by the auth dependencies
                 payload = decode_token(token)
                 tenant_id = payload.get("tenant_id", "N/A")
             except Exception:
                 pass
         
-        # Set context variables for this request
         token_ctx = tenant_id_context.set(tenant_id)
         request_ctx = request_id_context.set(request_id)
         
@@ -43,7 +38,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         
         path = request.url.path
         
-        # Log request with path
         logger.info(f"Request: {method} {path}")
 
         try:
@@ -52,12 +46,11 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             process_time = time.time() - start_time
             status_code = response.status_code
             
-            # Log response with path
+
             logger.info(
                 f"Response: {method} {path} {status_code} ({process_time:.3f}s)"
             )
             
-            # Add request ID to response headers
             response.headers["X-Request-ID"] = request_id
             
             return response
@@ -70,6 +63,5 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             )
             raise
         finally:
-            # Reset context variables
             tenant_id_context.reset(token_ctx)
             request_id_context.reset(request_ctx)

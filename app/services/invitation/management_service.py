@@ -218,7 +218,7 @@ class InvitationManagementService(BaseService):
         if invite.status != InviteStatus.PENDING:
             raise MiniMartException(
                 status_code=400,
-                message=f"Cannot cancel — invitation is already {invite.status.value.lower()}.",
+                message=f"Cannot cancel invitation is already {invite.status.value.lower()}.",
             )
 
         # Update DB
@@ -226,9 +226,6 @@ class InvitationManagementService(BaseService):
         invite.cancelled_at = get_now()
         await self.db.commit()
 
-        # Note: Since we don't store the token in the DB, we cannot get its jti 
-        # to invalidate it in Redis here. However, the DB status check in 
-        # ActionService will prevent any existing tokens from being used.
 
         return MessageResponse(message="Invitation cancelled successfully")
 
@@ -257,11 +254,9 @@ class InvitationManagementService(BaseService):
                 message=f"Cannot resend — invitation is already {invite.status.value.lower()}.",
             )
 
-        # 1. Cancel the old record (Invalidates the old token ID)
         invite.status = InviteStatus.CANCELLED
         invite.cancelled_at = get_now()
         
-        # 2. Create a fresh record (Gives us a new ID for the new token)
         expires_delta = timedelta(hours=settings.INVITATION_TOKEN_EXPIRE_HOURS)
         expires_at = get_now() + expires_delta
         
@@ -275,7 +270,6 @@ class InvitationManagementService(BaseService):
         self.db.add(new_invite)
         await self.db.flush()
 
-        # 3. Create New Token & Notify using the NEW ID
         await self._process_token_and_email(
             new_invite.id, shopping_list.id, shopping_list.name, invite.invited_user.email, user, background_tasks
         )

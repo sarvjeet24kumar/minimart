@@ -50,7 +50,7 @@ class InvitationActionService(BaseService):
             payload = decode_invitation_token(token)
         except JWTError as e:
             logger.warning("Invalid or expired invitation token")
-            raise ValidationException(f"Invalid or expired invitation token: {str(e)}") from e
+            raise ValidationException(f"Invalid or expired invitation token: {str(e)}")
 
         if payload["email"] != user.email:
             logger.warning("Invitation email mismatch")
@@ -86,7 +86,6 @@ class InvitationActionService(BaseService):
             await RedisService.invalidate_invitation_token(payload["jti"])
             raise ValidationException("Invitation has expired")
 
-        # Redis Validation (Single-use enforcement)
         if not await RedisService.validate_invitation_token(payload["jti"]):
             logger.warning("Invitation token not found in Redis or already used")
             raise ValidationException("Invitation token is invalid or has already been used")

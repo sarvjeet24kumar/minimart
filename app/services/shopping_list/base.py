@@ -58,7 +58,6 @@ class BaseListService(BaseService):
             logger.warning("Cross-tenant access denied to shopping list")
             raise ForbiddenException("Cross-tenant access denied")
 
-        # Deleted lists are only visible to Tenant Admins
         if shopping_list.deleted_at and user.role != UserRole.TENANT_ADMIN:
             raise NotFoundException("Shopping list not found")
 

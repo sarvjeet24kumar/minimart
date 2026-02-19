@@ -197,7 +197,6 @@ class ShoppingListService(BaseListService):
     ) -> ShoppingList:
         """
         Update a shopping list.
-        Tenant Admin can also set deleted_at to None to restore a deleted list.
         """
         shopping_list, _ = await self._get_list_with_access(
             list_id, user, require_owner_or_admin=True

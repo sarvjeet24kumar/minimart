@@ -95,7 +95,6 @@ class TenantService:
         tenants = list(result.scalars().all())
 
         items = []
-        # For each tenant, fetch counts (simplified for now, can be optimized with subqueries if needed)
         for tenant in tenants:
             user_count = await self.db.execute(
                 select(func.count(User.id)).where(User.tenant_id == tenant.id)

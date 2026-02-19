@@ -17,7 +17,9 @@ from app.schemas.chat import ChatMessageRequest, ChatMessageResponse
 from app.schemas.common import PaginatedResponse
 from app.services.chat_service import ChatService
 
-router = APIRouter(dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="chat"))])
+router = APIRouter(
+    dependencies=[Depends(RateLimit(settings.RATE_LIMIT_DEFAULT, scope="chat"))]
+)
 
 
 @router.get(
@@ -32,8 +34,7 @@ async def get_chat_messages(
     pagination: Annotated[PaginationParams, Depends()],
 ):
     """
-    Load chat history for a shopping list (Recent First).
-    Supports pagination with `page` and `size`.
+    Load chat history for a shopping listu.
     """
     chat_service = ChatService(db)
     return await chat_service.get_messages(
@@ -62,7 +63,9 @@ async def send_chat_message(
     return await chat_service.send_message(list_id, current_user, data.message)
 
 
-@router.delete("/{list_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{list_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_chat_message(
     list_id: UUID,
     message_id: UUID,

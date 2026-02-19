@@ -8,7 +8,6 @@ from app.services.redis_service import RedisService
 class RateLimit:
     """
     Custom Redis-based rate limiting dependency.
-    Uses "INCR" and "EXPIRE" to track request counts per IP and endpoint.
     """
     
     def __init__(self, limit_str: str, scope: str = "default"):

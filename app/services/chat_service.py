@@ -29,16 +29,13 @@ from app.websocket.manager import manager
 logger = get_logger(__name__)
 
 
-
 class ChatService:
     """Service for list-scoped chat operations."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _verify_membership(
-        self, list_id: UUID, user: User
-    ) -> ShoppingListMember:
+    async def _verify_membership(self, list_id: UUID, user: User) -> ShoppingListMember:
         """
         Verify the user is an ACCEPTED member of the list.
         """
@@ -116,9 +113,7 @@ class ChatService:
         }
 
         await manager.broadcast_chat(
-            str(list_id),
-            broadcast_payload,
-            exclude_user_id=None
+            str(list_id), broadcast_payload, exclude_user_id=None
         )
         logger.info("Chat message sent")
 
@@ -156,7 +151,11 @@ class ChatService:
             )
         )
 
-        query = query.order_by(ChatMessage.created_at.desc()).offset(pagination.skip).limit(pagination.size)
+        query = (
+            query.order_by(ChatMessage.created_at.desc())
+            .offset(pagination.skip)
+            .limit(pagination.size)
+        )
         result = await self.db.execute(query)
         messages = result.scalars().all()
 
@@ -172,19 +171,12 @@ class ChatService:
             for m in messages
         ]
         return PaginatedResponse(
-            data=items,
-            total=total,
-            page=pagination.page,
-            size=pagination.size
+            data=items, total=total, page=pagination.page, size=pagination.size
         )
 
-
-    async def delete_message(
-        self, list_id: UUID, message_id: UUID, user: User
-    ) -> None:
+    async def delete_message(self, list_id: UUID, message_id: UUID, user: User) -> None:
         """
         Soft-delete a chat message.
-        Only the sender or list owner can delete.
         """
         result = await self.db.execute(
             select(ShoppingList).where(ShoppingList.id == list_id)
@@ -221,7 +213,9 @@ class ChatService:
                 is_owner = True
 
         if not is_sender and not is_owner and not is_tenant_admin:
-            raise ForbiddenException("Only the message sender or list owner can delete messages")
+            raise ForbiddenException(
+                "Only the message sender ,list owner or tenant admin can delete messages"
+            )
 
         message.deleted_at = get_now()
         await self.db.commit()
