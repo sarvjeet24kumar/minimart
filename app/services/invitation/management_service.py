@@ -147,9 +147,17 @@ class InvitationManagementService(BaseService):
         )
         invitee = result.scalar_one_or_none()
 
-        if not invitee or not invitee.is_active or not invitee.is_email_verified:
-            logger.warning(f"Invalid invitee {user_id}")
-            raise ValidationException("Invitee not found, inactive, or unverified")
+        if not invitee:
+            logger.warning(f"Invitee {user_id} not found")
+            raise NotFoundException("Invitee not found")
+
+        if not invitee.is_active:
+            logger.warning(f"Invitee {user_id} is inactive")
+            raise ValidationException("Invitee is inactive")
+
+        if not invitee.is_email_verified:
+            logger.warning(f"Invitee {user_id} is unverified")
+            raise ValidationException("Invitee is unverified")
 
         # Check existing membership
         result = await self.db.execute(
